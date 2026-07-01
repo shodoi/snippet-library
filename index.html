@@ -9,17 +9,20 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div class="eyebrow" aria-hidden="true">$ snippets --list</div>
-    <h1>スニペット帳</h1>
-    <div class="sub">よく使うターミナルコマンド・AIエージェント向け指示をまとめてコピー</div>
+  <header class="header">
+    <div class="header-main">
+      <div class="eyebrow" aria-hidden="true">$ snippets --list</div>
+      <h1>スニペット帳</h1>
+      <div class="sub">よく使うターミナルコマンド・AIエージェント向け指示をまとめてコピー</div>
+    </div>
+    <button type="button" class="btn btn-ghost btn-options" id="openOptionsBtn" aria-label="設定とデータ管理">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      設定
+    </button>
   </header>
-
-  <section class="toolbar" role="search" aria-label="スニペットの検索とフィルター">
-    <input type="text" class="search" id="search" placeholder="説明・コマンドで検索…" aria-label="説明またはコマンドで検索">
-  </section>
-  <div class="tags" id="tagFilters" role="group" aria-label="カテゴリタグ"></div>
-  <div style="height:14px"></div>
 
   <button class="add-toggle" id="addToggle" aria-expanded="false" aria-controls="addForm">＋ 新しいスニペットを追加</button>
 
@@ -52,11 +55,39 @@
     </div>
   </form>
 
+  <section class="toolbar" role="search" aria-label="スニペットの検索とフィルター">
+    <div class="search-wrap">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="11" cy="11" r="8"></circle>
+        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+      </svg>
+      <input type="text" class="search" id="search" placeholder="説明・コマンドで検索…" aria-label="説明またはコマンドで検索">
+    </div>
+    <div class="tags" id="tagFilters" role="group" aria-label="カテゴリタグ"></div>
+  </section>
+  <div style="height:14px"></div>
+
   <main class="list" id="list" aria-label="スニペット一覧"></main>
   <div class="empty" id="emptyMsg" style="display:none;" role="status" aria-live="polite">該当するスニペットがありません</div>
   <div class="status" id="status" role="status" aria-live="polite"></div>
   <!-- スクリーンリーダー用のアナウンサー領域 -->
   <div id="sr-announcer" class="sr-only" aria-live="polite"></div>
 </div>
+
+<!-- 設定ダイアログ -->
+<dialog id="optionsDialog" aria-labelledby="optionsTitle">
+  <div class="dialog-header">
+    <h2 id="optionsTitle">データ管理設定</h2>
+    <button type="button" class="btn-close" id="closeOptionsBtn" aria-label="設定を閉じる">&times;</button>
+  </div>
+  <div class="dialog-body">
+    <p class="dialog-desc">スニペットデータのインポート（復元）およびエクスポート（バックアップ）を行います。</p>
+    <div class="options-actions">
+      <button type="button" class="btn btn-ghost" id="exportBtn" aria-label="スニペットデータをJSONとしてエクスポート">エクスポート</button>
+      <button type="button" class="btn btn-ghost" id="importBtn" aria-label="JSONファイルからスニペットデータをインポート">インポート</button>
+      <input type="file" id="importFile" accept=".json" class="sr-only" aria-label="スニペットデータのインポートファイル選択">
+    </div>
+  </div>
+</dialog>
 </body>
 </html>

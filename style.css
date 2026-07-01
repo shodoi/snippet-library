@@ -24,7 +24,40 @@ body{
 }
 .wrap{max-width:820px;margin:0 auto;padding:32px 20px 80px;}
 
-header{margin-bottom:24px;}
+header{
+  margin-bottom:24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+}
+.header-main{
+  flex: 1;
+}
+.btn-options{
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  cursor: pointer;
+  height: 38px;
+}
+.btn-options:hover{
+  color: var(--text);
+  border-color: var(--teal-dim);
+}
+.btn-options svg{
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+.btn-options:hover svg{
+  transform: rotate(45deg);
+}
 .eyebrow{
   font-family:var(--mono);
   font-size:12px;
@@ -42,21 +75,39 @@ h1{
 
 .toolbar{
   display:flex;
-  gap:10px;
-  margin:22px 0 16px;
+  gap:12px;
+  margin:24px 0 20px;
   flex-wrap:wrap;
+  align-items:center;
+}
+.search-wrap{
+  position: relative;
+  flex: 1 1 240px;
+}
+.search-icon{
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  pointer-events: none;
 }
 .search{
-  flex:1 1 220px;
-  background:var(--panel);
-  border:1px solid var(--line);
-  border-radius:8px;
-  padding:10px 12px;
-  color:var(--text);
-  font-size:14px;
-  font-family:var(--sans);
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px 10px 36px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: var(--sans);
+  transition: border-color 0.15s, background-color 0.15s;
 }
-.search:focus{outline:none;border-color:var(--teal);}
+.search:focus{
+  outline:none;
+  border-color:var(--teal);
+  background: var(--panel);
+}
 .search::placeholder{color:var(--muted);}
 
 .tags{display:flex;gap:6px;flex-wrap:wrap;}
@@ -76,19 +127,31 @@ h1{
 .add-toggle{
   display:inline-flex;
   align-items:center;
-  gap:6px;
-  background:none;
-  border:1px dashed var(--line);
-  color:var(--muted);
+  justify-content:center;
+  gap:8px;
+  background: linear-gradient(135deg, var(--teal-dim), var(--teal));
+  border: none;
+  color: #0d1a17;
+  font-weight: 600;
   font-family:var(--sans);
-  font-size:13.5px;
-  padding:9px 14px;
+  font-size:14px;
+  padding:12px 16px;
   border-radius:8px;
   cursor:pointer;
-  margin-bottom:18px;
+  margin-bottom:20px;
   width:100%;
+  box-shadow: 0 4px 12px rgba(95, 179, 163, 0.2);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
-.add-toggle:hover{border-color:var(--teal-dim);color:var(--teal);}
+.add-toggle:hover{
+  filter: brightness(1.1);
+  box-shadow: 0 6px 16px rgba(95, 179, 163, 0.3);
+  transform: translateY(-1px);
+}
+.add-toggle:active{
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(95, 179, 163, 0.2);
+}
 
 .add-form{
   background:var(--panel);
@@ -268,4 +331,87 @@ pre.code{
 @media (prefers-reduced-motion: no-preference){
   .copy-btn{transition:border-color .15s, color .15s, background .15s;}
   .card{transition:border-color .15s;}
+}
+
+/* 設定ダイアログ (モーダル) のスタイル */
+dialog#optionsDialog {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0;
+  color: var(--text);
+  max-width: 460px;
+  width: calc(100% - 32px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+}
+dialog#optionsDialog::backdrop {
+  background: rgba(10, 12, 14, 0.7);
+  backdrop-filter: blur(5px);
+}
+dialog#optionsDialog .dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+dialog#optionsDialog h2 {
+  font-size: 16px;
+  margin: 0;
+  font-weight: 600;
+}
+dialog#optionsDialog .btn-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 24px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  transition: background-color 0.15s, color 0.15s;
+}
+dialog#optionsDialog .btn-close:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+}
+dialog#optionsDialog .dialog-body {
+  padding: 20px;
+}
+dialog#optionsDialog .dialog-desc {
+  color: var(--muted);
+  font-size: 13.5px;
+  margin: 0 0 20px;
+}
+dialog#optionsDialog .options-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+dialog#optionsDialog .options-actions .btn {
+  padding: 10px 16px;
+  font-size: 13.5px;
+}
+@keyframes dialogFadeIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -45%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+dialog#optionsDialog[open] {
+  animation: dialogFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }

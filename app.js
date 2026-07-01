@@ -89,6 +89,12 @@
   const addForm = document.getElementById('addForm');
   const cancelAdd = document.getElementById('cancelAdd');
   const srAnnouncer = document.getElementById('sr-announcer');
+  const exportBtn = document.getElementById('exportBtn');
+  const importBtn = document.getElementById('importBtn');
+  const importFile = document.getElementById('importFile');
+  const optionsDialog = document.getElementById('optionsDialog');
+  const openOptionsBtn = document.getElementById('openOptionsBtn');
+  const closeOptionsBtn = document.getElementById('closeOptionsBtn');
 
   // スクリーンリーダー向け動的通知
   function announce(message) {
@@ -313,6 +319,106 @@
     closeForm();
     render();
   });
+
+  // エクスポート機能
+  function exportSnippets() {
+    try {
+      const dataStr = JSON.stringify(snippets, null, 2);
+      const blob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const tempLink = document.createElement('a');
+      tempLink.href = url;
+      tempLink.download = `snippets-backup-${date}.json`;
+      
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      document.body.removeChild(tempLink);
+      URL.revokeObjectURL(url);
+      
+      announce('スニペットデータのエクスポートが完了しました。');
+      statusEl.textContent = 'エクスポート完了';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    } catch (e) {
+      console.error('Export failed:', e);
+      announce('エクスポートに失敗しました。');
+      statusEl.textContent = 'エクスポート失敗';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    }
+  }
+
+  // インポート機能
+  function triggerImport() {
+    importFile.click();
+  }
+
+  async function handleImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const parsed = JSON.parse(evt.target.result);
+        if (!validateSnippets(parsed)) {
+          throw new Error('Invalid data structure');
+        }
+
+        if (!confirm(`インポートを実行すると、現在のデータが全て上書きされます。よろしいですか？（インポート件数: ${parsed.length}件）`)) {
+          importFile.value = '';
+          return;
+        }
+
+        snippets = parsed;
+        await persist();
+        render();
+        if (optionsDialog) {
+          optionsDialog.close();
+        }
+        announce(`スニペットデータをインポートしました。計 ${parsed.length} 件を取り込みました。`);
+        statusEl.textContent = 'インポート完了';
+        setTimeout(() => { statusEl.textContent = ''; }, 2000);
+      } catch (err) {
+        console.error('Import failed:', err);
+        announce('インポートに失敗しました。無効なファイル形式です。');
+        statusEl.textContent = 'インポート失敗: 無効なデータ形式';
+        setTimeout(() => { statusEl.textContent = ''; }, 3000);
+      }
+      importFile.value = '';
+    };
+    reader.onerror = () => {
+      console.error('File reading failed');
+      announce('ファイルの読み込みに失敗しました。');
+      statusEl.textContent = 'ファイル読込失敗';
+      setTimeout(() => { statusEl.textContent = ''; }, 2000);
+      importFile.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  // 設定ダイアログの開閉制御
+  if (openOptionsBtn && optionsDialog) {
+    openOptionsBtn.addEventListener('click', () => {
+      optionsDialog.showModal();
+    });
+  }
+  if (closeOptionsBtn && optionsDialog) {
+    closeOptionsBtn.addEventListener('click', () => {
+      optionsDialog.close();
+    });
+  }
+  if (optionsDialog) {
+    optionsDialog.addEventListener('click', (e) => {
+      if (e.target === optionsDialog) {
+        optionsDialog.close();
+      }
+    });
+  }
+
+  exportBtn.addEventListener('click', exportSnippets);
+  importBtn.addEventListener('click', triggerImport);
+  importFile.addEventListener('change', handleImport);
 
   load();
 })();
