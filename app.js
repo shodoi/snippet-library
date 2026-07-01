@@ -1,6 +1,8 @@
 (function(){
   const STORAGE_KEY = 'snippets:v1';
   const TAG_LABELS = { terminal:'Terminal', ai:'AI Agent', other:'Other' };
+  const GIST_SETTINGS_KEY = 'snippets:gist:settings:v1';
+  const GIST_TOKEN_KEY = 'snippets:gist:token:v1';
 
   // 安全なUUID生成 (crypto.randomUUIDのフォールバック)
   function generateUUID() {
@@ -151,6 +153,16 @@
   const openOptionsBtn = document.getElementById('openOptionsBtn');
   const closeOptionsBtn = document.getElementById('closeOptionsBtn');
 
+  // Gist 同期用 DOM 要素
+  const gistTokenEl = document.getElementById('gistToken');
+  const gistIdEl = document.getElementById('gistId');
+  const lastPushedAtText = document.getElementById('lastPushedAtText');
+  const lastPulledAtText = document.getElementById('lastPulledAtText');
+  const gistDeleteBtn = document.getElementById('gistDeleteBtn');
+  const gistPullBtn = document.getElementById('gistPullBtn');
+  const gistPushBtn = document.getElementById('gistPushBtn');
+  const tokenStorageRadios = document.getElementsByName('tokenStorage');
+
   // スクリーンリーダー向け動的通知
   function announce(message) {
     if (!srAnnouncer) return;
@@ -210,9 +222,382 @@
     });
   }
 
+  // Gist 関連のデータ状態
+  let gistSettings = {
+    gistId: '',
+    tokenStorage: 'session',
+    lastPushedAt: null,
+    lastPulledAt: null
+  };
+  let gistToken = '';
+
+  async function loadGistSettings() {
+    try {
+      const res = await storage.get(GIST_SETTINGS_KEY);
+      if (res && res.value) {
+        gistSettings = { ...gistSettings, ...JSON.parse(res.value) };
+      }
+    } catch (e) {
+      console.warn('Failed to load Gist settings:', e);
+    }
+
+    // Token のロード
+    try {
+      if (gistSettings.tokenStorage === 'local') {
+        gistToken = localStorage.getItem(GIST_TOKEN_KEY) || '';
+      } else {
+        gistToken = sessionStorage.getItem(GIST_TOKEN_KEY) || '';
+      }
+    } catch (e) {
+      console.warn('Failed to load Gist token:', e);
+    }
+  }
+
+  async function saveGistSettings() {
+    try {
+      await storage.set(GIST_SETTINGS_KEY, JSON.stringify(gistSettings));
+    } catch (e) {
+      console.error('Failed to save Gist settings:', e);
+    }
+  }
+
+  function saveGistToken() {
+    try {
+      if (gistSettings.tokenStorage === 'local') {
+        localStorage.setItem(GIST_TOKEN_KEY, gistToken);
+        sessionStorage.removeItem(GIST_TOKEN_KEY);
+      } else {
+        sessionStorage.setItem(GIST_TOKEN_KEY, gistToken);
+        localStorage.removeItem(GIST_TOKEN_KEY);
+      }
+    } catch (e) {
+      console.error('Failed to save Gist token:', e);
+    }
+  }
+
+  async function deleteGistSettings() {
+    gistSettings = {
+      gistId: '',
+      tokenStorage: 'session',
+      lastPushedAt: null,
+      lastPulledAt: null
+    };
+    gistToken = '';
+    try {
+      await storage.set(GIST_SETTINGS_KEY, JSON.stringify(gistSettings));
+      localStorage.removeItem(GIST_TOKEN_KEY);
+      sessionStorage.removeItem(GIST_TOKEN_KEY);
+    } catch (e) {
+      console.error('Failed to delete Gist settings/token:', e);
+    }
+  }
+
+  // Gist API リクエストラッパー
+  async function gistRequest(method, url, token, body = null) {
+    const headers = {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json'
+    };
+    const options = {
+      method,
+      headers
+    };
+    if (body) {
+      options.body = JSON.stringify(body);
+    }
+
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+      let errMsg = `HTTP error! status: ${response.status}`;
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.message) {
+          errMsg = errJson.message;
+        }
+      } catch (e) {}
+      
+      const error = new Error(errMsg);
+      error.status = response.status;
+      throw error;
+    }
+
+    return await response.json();
+  }
+
+  // 新規 Gist 作成
+  async function createGist(token, payload) {
+    const body = {
+      description: 'Snippet Library backup',
+      public: false,
+      files: {
+        'snippets.json': {
+          content: JSON.stringify(payload, null, 2)
+        }
+      }
+    };
+    return await gistRequest('POST', 'https://api.github.com/gists', token, body);
+  }
+
+  // 既存 Gist 更新
+  async function updateGist(token, gistId, payload) {
+    const body = {
+      files: {
+        'snippets.json': {
+          content: JSON.stringify(payload, null, 2)
+        }
+      }
+    };
+    return await gistRequest('PATCH', `https://api.github.com/gists/${gistId}`, token, body);
+  }
+
+  // Gist 読み込み
+  async function fetchGist(token, gistId) {
+    const data = await gistRequest('GET', `https://api.github.com/gists/${gistId}`, token);
+    if (!data.files || !data.files['snippets.json']) {
+      throw new Error('Gist内に snippets.json が見つかりません');
+    }
+    return JSON.parse(data.files['snippets.json'].content);
+  }
+
+  // Gist用データ検証
+  function validateGistPayload(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    if (payload.schemaVersion !== 1) return false;
+    if (payload.app !== 'snippet-library') return false;
+    return validateSnippets(payload.snippets);
+  }
+
+  async function pushToGist() {
+    if (!gistToken.trim()) {
+      throw new Error('GitHub Tokenが設定されていません');
+    }
+
+    const payload = {
+      schemaVersion: 1,
+      app: 'snippet-library',
+      updatedAt: new Date().toISOString(),
+      snippets: snippets
+    };
+
+    let result;
+    if (gistSettings.gistId) {
+      result = await updateGist(gistToken, gistSettings.gistId, payload);
+    } else {
+      result = await createGist(gistToken, payload);
+      gistSettings.gistId = result.id;
+    }
+
+    gistSettings.lastPushedAt = payload.updatedAt;
+    await saveGistSettings();
+    return result;
+  }
+
+  async function pullFromGist() {
+    if (!gistToken.trim()) {
+      throw new Error('GitHub Tokenが設定されていません');
+    }
+    if (!gistSettings.gistId.trim()) {
+      throw new Error('Gist IDが設定されていません');
+    }
+
+    const payload = await fetchGist(gistToken, gistSettings.gistId);
+    
+    if (!validateGistPayload(payload)) {
+      throw new Error('Gistのデータ形式が無効か、破損しています');
+    }
+
+    return payload;
+  }
+
+  function updateGistUI() {
+    if (!gistTokenEl) return;
+    
+    gistTokenEl.value = gistToken;
+    gistIdEl.value = gistSettings.gistId;
+
+    for (const radio of tokenStorageRadios) {
+      radio.checked = (radio.value === gistSettings.tokenStorage);
+    }
+
+    const formatDate = (isoString) => {
+      if (!isoString) return '未設定';
+      try {
+        const d = new Date(isoString);
+        return d.toLocaleString('ja-JP');
+      } catch (e) {
+        return 'エラー';
+      }
+    };
+
+    lastPushedAtText.textContent = formatDate(gistSettings.lastPushedAt);
+    lastPulledAtText.textContent = formatDate(gistSettings.lastPulledAt);
+  }
+
+  function registerGistListeners() {
+    if (!gistTokenEl) return;
+
+    const toggleTokenVisibility = document.getElementById('toggleTokenVisibility');
+    if (toggleTokenVisibility) {
+      toggleTokenVisibility.addEventListener('click', () => {
+        const isPassword = gistTokenEl.type === 'password';
+        gistTokenEl.type = isPassword ? 'text' : 'password';
+        toggleTokenVisibility.setAttribute('aria-label', isPassword ? 'トークンを非表示にする' : 'トークンを表示する');
+        if (isPassword) {
+          toggleTokenVisibility.innerHTML = `
+            <svg class="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+          `;
+        } else {
+          toggleTokenVisibility.innerHTML = `
+            <svg class="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          `;
+        }
+      });
+    }
+
+    gistTokenEl.addEventListener('input', (e) => {
+      gistToken = e.target.value.trim();
+      saveGistToken();
+    });
+
+    gistIdEl.addEventListener('input', (e) => {
+      gistSettings.gistId = e.target.value.trim();
+      saveGistSettings();
+    });
+
+    for (const radio of tokenStorageRadios) {
+      radio.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          gistSettings.tokenStorage = e.target.value;
+          saveGistSettings();
+          saveGistToken();
+        }
+      });
+    }
+
+    gistDeleteBtn.addEventListener('click', async () => {
+      if (confirm('GitHub Token および Gist ID などの連携設定を削除します。よろしいですか？')) {
+        await deleteGistSettings();
+        updateGistUI();
+        announce('Gist連携設定を削除しました。');
+      }
+    });
+
+    let isSyncing = false;
+    function setSyncState(syncing) {
+      isSyncing = syncing;
+      gistPullBtn.disabled = syncing;
+      gistPushBtn.disabled = syncing;
+      gistDeleteBtn.disabled = syncing;
+      gistTokenEl.disabled = syncing;
+      gistIdEl.disabled = syncing;
+      for (const radio of tokenStorageRadios) {
+        radio.disabled = syncing;
+      }
+    }
+
+    gistPushBtn.addEventListener('click', async () => {
+      if (isSyncing) return;
+      if (!gistToken.trim()) {
+        alert('GitHub Token を入力してください。');
+        gistTokenEl.focus();
+        return;
+      }
+
+      setSyncState(true);
+      announce('Gistへの保存を開始します…');
+      try {
+        await pushToGist();
+        updateGistUI();
+        announce('Gistへの保存が完了しました。');
+        alert('Gistへの保存が完了しました。');
+      } catch (err) {
+        console.error('Gist push failed:', err);
+        let friendlyMsg = '保存に失敗しました。';
+        if (err.status === 401 || err.status === 403) {
+          friendlyMsg += 'GitHub Token の権限または有効期限を確認してください。';
+        } else if (err.status === 404) {
+          friendlyMsg += 'Gist ID が存在しないか、Tokenの権限が不足しています。';
+        } else {
+          friendlyMsg += err.message;
+        }
+        announce(friendlyMsg);
+        alert(friendlyMsg);
+      } finally {
+        setSyncState(false);
+      }
+    });
+
+    gistPullBtn.addEventListener('click', async () => {
+      if (isSyncing) return;
+      if (!gistToken.trim()) {
+        alert('GitHub Token を入力してください。');
+        gistTokenEl.focus();
+        return;
+      }
+      if (!gistSettings.gistId.trim()) {
+        alert('Gist ID を入力してください。');
+        gistIdEl.focus();
+        return;
+      }
+
+      setSyncState(true);
+      announce('Gistからの読み込みを開始します…');
+      try {
+        const payload = await pullFromGist();
+        setSyncState(false);
+
+        if (confirm(`Gistから ${payload.snippets.length} 件のスニペットを取得しました。現在のローカルデータを全て上書きしますが、よろしいですか？`)) {
+          setSyncState(true);
+          const originalSnippets = snippets;
+          snippets = payload.snippets;
+          try {
+            await persist();
+            gistSettings.lastPulledAt = payload.updatedAt || new Date().toISOString();
+            await saveGistSettings();
+            render();
+            if (optionsDialog) {
+              optionsDialog.close();
+            }
+            updateGistUI();
+            announce('Gistからの読み込みとローカルへの反映が完了しました。');
+            alert('Gistからの読み込みが完了しました。');
+          } catch (e) {
+            snippets = originalSnippets;
+            announce('ローカルデータの保存に失敗したため、読み込みをキャンセルしました。');
+            alert('インポートに失敗しました。ローカルストレージへの書き込みエラーです。');
+          }
+        }
+      } catch (err) {
+        console.error('Gist pull failed:', err);
+        let friendlyMsg = '読み込みに失敗しました。';
+        if (err.status === 401 || err.status === 403) {
+          friendlyMsg += 'GitHub Token の権限または有効期限を確認してください。';
+        } else if (err.status === 404) {
+          friendlyMsg += 'Gist ID が存在しないか、Tokenの権限が不足しています。';
+        } else {
+          friendlyMsg += err.message;
+        }
+        announce(friendlyMsg);
+        alert(friendlyMsg);
+      } finally {
+        setSyncState(false);
+      }
+    });
+  }
+
   async function load(){
     statusEl.textContent = '読み込み中…';
     try{
+      await loadGistSettings();
       const res = await storage.get(STORAGE_KEY);
       if (!res || !res.value) {
         // 保存データが存在しない
@@ -551,6 +936,7 @@
   // 設定ダイアログの開閉制御
   if (openOptionsBtn && optionsDialog) {
     openOptionsBtn.addEventListener('click', () => {
+      updateGistUI();
       optionsDialog.showModal();
     });
   }
@@ -570,6 +956,8 @@
   exportBtn.addEventListener('click', exportSnippets);
   importBtn.addEventListener('click', triggerImport);
   importFile.addEventListener('change', handleImport);
+
+  registerGistListeners();
 
   load();
 })();

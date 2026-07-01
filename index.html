@@ -81,11 +81,59 @@
     <button type="button" class="btn-close" id="closeOptionsBtn" aria-label="設定を閉じる">&times;</button>
   </div>
   <div class="dialog-body">
-    <p class="dialog-desc">スニペットデータのインポート（復元）およびエクスポート（バックアップ）を行います。</p>
-    <div class="options-actions">
-      <button type="button" class="btn btn-ghost" id="exportBtn" aria-label="スニペットデータをJSONとしてエクスポート">エクスポート</button>
-      <button type="button" class="btn btn-ghost" id="importBtn" aria-label="JSONファイルからスニペットデータをインポート">インポート</button>
-      <input type="file" id="importFile" accept=".json" class="sr-only" aria-label="スニペットデータのインポートファイル選択">
+    <div class="dialog-section">
+      <h3 class="dialog-section-title">ローカルファイル</h3>
+      <p class="dialog-desc">スニペットデータをJSONとしてインポート（復元）およびエクスポート（バックアップ）を行います。</p>
+      <div class="options-actions">
+        <button type="button" class="btn btn-ghost" id="exportBtn" aria-label="スニペットデータをJSONとしてエクスポート">エクスポート</button>
+        <button type="button" class="btn btn-ghost" id="importBtn" aria-label="JSONファイルからスニペットデータをインポート">インポート</button>
+        <input type="file" id="importFile" accept=".json" class="sr-only" aria-label="スニペットデータのインポートファイル選択">
+      </div>
+    </div>
+
+    <div class="dialog-separator"></div>
+
+    <div class="dialog-section">
+      <h3 class="dialog-section-title">GitHub Gist 同期</h3>
+      <p class="dialog-desc">スニペットデータを GitHub Gist に保存（バックアップ）または読み込み（復元）します。</p>
+      <div class="warning-box">
+        <p class="dialog-desc-warn">※ Gistは非公開（Secret）で作成されますが、URLを知っている人はアクセスできる可能性があるため、パスワードやAPIキーなどの機密情報をスニペットに含めないでください。</p>
+      </div>
+
+      <div class="field">
+        <label for="gistToken">GitHub Personal Access Token <span style="color:var(--danger)" aria-hidden="true">*</span></label>
+        <div class="password-input-wrapper">
+          <input type="password" id="gistToken" placeholder="ghp_... または github_pat_..." aria-describedby="gist-token-desc">
+          <button type="button" id="toggleTokenVisibility" class="btn-toggle-password" aria-label="トークンを表示する">
+            <svg class="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
+        <div class="token-storage-select">
+          <span class="storage-label">トークン保存方法:</span>
+          <label><input type="radio" name="tokenStorage" value="session" checked> セッション限り (推奨)</label>
+          <label><input type="radio" name="tokenStorage" value="local"> ブラウザに永続保存</label>
+        </div>
+        <p id="gist-token-desc" class="field-hint">※「gists」スコープ（権限）が必要です。</p>
+      </div>
+
+      <div class="field">
+        <label for="gistId">Gist ID</label>
+        <input type="text" id="gistId" placeholder="未入力の場合は保存時に新規作成されます">
+      </div>
+
+      <div class="gist-status-info">
+        <p>最終保存: <span id="lastPushedAtText">未保存</span></p>
+        <p>最終読込: <span id="lastPulledAtText">未読込</span></p>
+      </div>
+
+      <div class="options-actions">
+        <button type="button" class="btn btn-ghost danger" id="gistDeleteBtn" aria-label="Gistの設定情報を削除">Tokenを削除</button>
+        <button type="button" class="btn btn-ghost" id="gistPullBtn" aria-label="Gistからデータを取得して上書き">Gistから読み込み</button>
+        <button type="button" class="btn btn-primary" id="gistPushBtn" aria-label="現在のデータをGistに保存">Gistへ保存</button>
+      </div>
     </div>
   </div>
 </dialog>
