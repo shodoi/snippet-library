@@ -51,17 +51,72 @@
     }
   };
 
-  // 読み込みデータの構造バリデーション
+  // 読み込みデータの構造・内容バリデーション
   function validateSnippets(data) {
     if (!Array.isArray(data)) return false;
-    return data.every(item => 
-      item &&
-      typeof item.id === 'string' &&
-      typeof item.title === 'string' &&
-      typeof item.desc === 'string' &&
-      typeof item.tag === 'string' &&
-      typeof item.code === 'string'
-    );
+    if (data.length > 1000) return false; // 最大1000件までに制限
+
+    const ids = new Set();
+    const allowedTags = Object.keys(TAG_LABELS);
+
+    for (const item of data) {
+      if (!item || typeof item !== 'object') return false;
+      const { id, title, desc, tag, code } = item;
+
+      // 型と必須項目チェック (id, title, code は空文字不可)
+      if (typeof id !== 'string' || !id.trim()) return false;
+      if (typeof title !== 'string' || !title.trim()) return false;
+      if (typeof desc !== 'string') return false;
+      if (typeof tag !== 'string') return false;
+      if (typeof code !== 'string' || !code.trim()) return false;
+
+      // IDの一意性チェック
+      if (ids.has(id)) return false;
+      ids.add(id);
+
+      // 許可タグチェック
+      if (!allowedTags.includes(tag)) return false;
+
+      // 文字数上限チェック (安全のため)
+      if (id.length > 100) return false;
+      if (title.length > 100) return false;
+      if (desc.length > 500) return false;
+      if (code.length > 10000) return false;
+    }
+
+    return true;
+  }
+
+  // コピー処理のフォールバック
+  function copyToClipboardFallback(text) {
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '-9999px';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return success;
+    } catch (e) {
+      console.error('Fallback copy failed:', e);
+      return false;
+    }
+  }
+
+  // クリップボードへのコピー共通関数
+  async function copyToClipboard(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (e) {
+        console.warn('Clipboard API writeText failed, trying fallback:', e);
+      }
+    }
+    return copyToClipboardFallback(text);
   }
 
   const seed = [
@@ -105,34 +160,103 @@
     }, 100);
   }
 
+  // 破損データ時のエラー表示
+  function showCorruptedDataError(rawText) {
+    statusEl.textContent = 'データエラー';
+    listEl.innerHTML = `
+      <div class="error-panel">
+        <h3>データの読み込みに失敗しました</h3>
+        <p>保存されているデータが破損しているか、無効な形式です。データを保護するため、初期データでの自動上書きは行いませんでした。</p>
+        <p>以下のいずれかの操作を行ってください：</p>
+        <div class="error-actions">
+          <button type="button" id="btn-export-corrupted" class="btn">破損データをダウンロード</button>
+          <button type="button" id="btn-reset-corrupted" class="btn danger">データをリセット（初期化）</button>
+        </div>
+      </div>
+    `;
+    emptyEl.style.display = 'none';
+
+    document.getElementById('btn-export-corrupted').addEventListener('click', () => {
+      try {
+        const blob = new Blob([rawText], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const tempLink = document.createElement('a');
+        tempLink.href = url;
+        tempLink.download = 'snippets-corrupted-backup.json';
+        document.body.appendChild(tempLink);
+        tempLink.click();
+        document.body.removeChild(tempLink);
+        URL.revokeObjectURL(url);
+        announce('破損データのダウンロードを開始しました。');
+      } catch (e) {
+        console.error('Failed to export corrupted data:', e);
+        announce('ダウンロードに失敗しました。');
+      }
+    });
+
+    document.getElementById('btn-reset-corrupted').addEventListener('click', async () => {
+      if (confirm('現在のデータを消去し、初期状態に戻します。よろしいですか？')) {
+        snippets = seed;
+        try {
+          await persist();
+          statusEl.textContent = '';
+          renderTagFilters();
+          render();
+          announce('データをリセットし、初期データで上書きしました。');
+        } catch (e) {
+          alert('初期化データの保存に失敗しました。');
+        }
+      }
+    });
+  }
+
   async function load(){
     statusEl.textContent = '読み込み中…';
     try{
       const res = await storage.get(STORAGE_KEY);
-      const parsed = res && res.value ? JSON.parse(res.value) : null;
-      if(parsed && validateSnippets(parsed)){
-        snippets = parsed;
-      }else{
+      if (!res || !res.value) {
+        // 保存データが存在しない
         snippets = seed;
         await persist();
+        statusEl.textContent = '';
+        renderTagFilters();
+        render();
+        return;
+      }
+
+      let parsed = null;
+      let parseFailed = false;
+      try {
+        parsed = JSON.parse(res.value);
+      } catch (e) {
+        parseFailed = true;
+      }
+
+      if (!parseFailed && validateSnippets(parsed)) {
+        snippets = parsed;
+        statusEl.textContent = '';
+        renderTagFilters();
+        render();
+      } else {
+        showCorruptedDataError(res.value);
       }
     }catch(e){
-      console.error('Failed to load snippets, falling back to seed:', e);
-      snippets = seed;
-      try{ await persist(); }catch(e2){ /* ignore */ }
+      console.error('Failed to load snippets:', e);
+      statusEl.textContent = 'ストレージの読み込みに失敗しました';
     }
-    statusEl.textContent = '';
-    renderTagFilters();
-    render();
   }
 
   async function persist(){
     try{
       const result = await storage.set(STORAGE_KEY, JSON.stringify(snippets));
-      if(!result){ statusEl.textContent = '保存に失敗しました'; }
+      if(!result){
+        statusEl.textContent = '保存に失敗しました';
+        throw new Error('Storage write failed');
+      }
     }catch(e){
       console.error('Failed to persist snippets:', e);
       statusEl.textContent = '保存に失敗しました';
+      throw e;
     }
   }
 
@@ -199,8 +323,8 @@
       copyBtn.textContent = 'コピー';
       copyBtn.setAttribute('aria-label', `${s.title}のコードをコピー`);
       copyBtn.addEventListener('click', async ()=>{
-        try{
-          await navigator.clipboard.writeText(s.code);
+        const success = await copyToClipboard(s.code);
+        if (success) {
           copyBtn.textContent = 'コピーしました';
           copyBtn.classList.add('copied');
           announce(`${s.title}をクリップボードにコピーしました。`);
@@ -208,7 +332,7 @@
             copyBtn.textContent = 'コピー';
             copyBtn.classList.remove('copied');
           }, 1400);
-        }catch(e){
+        } else {
           copyBtn.textContent = '失敗';
           announce('コピーに失敗しました。');
           setTimeout(()=>{ copyBtn.textContent = 'コピー'; }, 1400);
@@ -231,11 +355,21 @@
           return;
         }
         clearTimeout(deleteTimer);
+        const originalSnippets = snippets;
         snippets = snippets.filter(x=>x.id!==s.id);
-        await persist();
-        render();
-        announce(`${s.title}を削除しました。`);
-        searchEl.focus();
+        try {
+          await persist();
+          render();
+          announce(`${s.title}を削除しました。`);
+          searchEl.focus();
+        } catch(e) {
+          snippets = originalSnippets;
+          statusEl.textContent = '削除に失敗しました';
+          setTimeout(()=>{ statusEl.textContent = ''; }, 3000);
+          announce('削除に失敗しました。');
+          deleteBtn.textContent = '削除';
+          deleteBtn.classList.remove('confirming');
+        }
       });
 
       const editBtn = card.querySelector('.edit-btn');
@@ -307,17 +441,26 @@
       return;
     }
 
+    const originalSnippets = snippets;
+    const isEdit = !!editingId;
+
     if(editingId){
-      const idx = snippets.findIndex(x=>x.id===editingId);
-      if(idx>-1) snippets[idx] = { ...snippets[idx], title, desc, tag, code };
-      announce(`スニペット「${title}」を更新しました。`);
+      snippets = snippets.map(x => x.id === editingId ? { ...x, title, desc, tag, code } : x);
     }else{
-      snippets.unshift({ id: generateUUID(), title, desc, tag, code });
-      announce(`スニペット「${title}」を追加しました。`);
+      snippets = [{ id: generateUUID(), title, desc, tag, code }, ...snippets];
     }
-    await persist();
-    closeForm();
-    render();
+
+    try {
+      await persist();
+      closeForm();
+      render();
+      announce(isEdit ? `スニペット「${title}」を更新しました。` : `スニペット「${title}」を追加しました。`);
+    } catch(e) {
+      snippets = originalSnippets;
+      statusEl.textContent = '保存に失敗しました';
+      setTimeout(()=>{ statusEl.textContent = ''; }, 3000);
+      announce('保存に失敗しました。');
+    }
   });
 
   // エクスポート機能
@@ -370,15 +513,23 @@
           return;
         }
 
+        const originalSnippets = snippets;
         snippets = parsed;
-        await persist();
-        render();
-        if (optionsDialog) {
-          optionsDialog.close();
+        try {
+          await persist();
+          render();
+          if (optionsDialog) {
+            optionsDialog.close();
+          }
+          announce(`スニペットデータをインポートしました。計 ${parsed.length} 件を取り込みました。`);
+          statusEl.textContent = 'インポート完了';
+          setTimeout(() => { statusEl.textContent = ''; }, 2000);
+        } catch (e) {
+          snippets = originalSnippets;
+          announce('インポートに失敗しました。保存できませんでした。');
+          statusEl.textContent = 'インポート失敗: 保存エラー';
+          setTimeout(() => { statusEl.textContent = ''; }, 3000);
         }
-        announce(`スニペットデータをインポートしました。計 ${parsed.length} 件を取り込みました。`);
-        statusEl.textContent = 'インポート完了';
-        setTimeout(() => { statusEl.textContent = ''; }, 2000);
       } catch (err) {
         console.error('Import failed:', err);
         announce('インポートに失敗しました。無効なファイル形式です。');

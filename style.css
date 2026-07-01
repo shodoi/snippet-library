@@ -415,3 +415,46 @@ dialog#optionsDialog .options-actions .btn {
 dialog#optionsDialog[open] {
   animation: dialogFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* エラーパネルのスタイル */
+.error-panel {
+  background: rgba(201, 106, 90, 0.1);
+  border: 1px solid var(--danger);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+}
+.error-panel h3 {
+  color: var(--danger);
+  margin-top: 0;
+  font-size: 16px;
+}
+.error-panel p {
+  font-size: 13.5px;
+  color: var(--text);
+  margin: 8px 0 16px;
+}
+.error-actions {
+  display: flex;
+  gap: 12px;
+}
+.error-actions .btn {
+  font-size: 13px;
+  padding: 8px 16px;
+}
+.error-actions .btn:not(.danger) {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+.error-actions .btn:not(.danger):hover {
+  border-color: var(--teal);
+}
+.error-actions .btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+.error-actions .btn.danger:hover {
+  filter: brightness(1.1);
+}
+
