@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>スニペット帳</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow" aria-hidden="true">$ snippets --list</div>
+    <h1>スニペット帳</h1>
+    <div class="sub">よく使うターミナルコマンド・AIエージェント向け指示をまとめてコピー</div>
+  </header>
+
+  <section class="toolbar" role="search" aria-label="スニペットの検索とフィルター">
+    <input type="text" class="search" id="search" placeholder="説明・コマンドで検索…" aria-label="説明またはコマンドで検索">
+  </section>
+  <div class="tags" id="tagFilters" role="group" aria-label="カテゴリタグ"></div>
+  <div style="height:14px"></div>
+
+  <button class="add-toggle" id="addToggle" aria-expanded="false" aria-controls="addForm">＋ 新しいスニペットを追加</button>
+
+  <form class="add-form" id="addForm" aria-labelledby="addToggle">
+    <div class="form-row">
+      <div class="field">
+        <label for="f-title">タイトル <span style="color:var(--danger)" aria-hidden="true">*</span></label>
+        <input type="text" id="f-title" placeholder="例: トランジェント全削除" required>
+      </div>
+      <div class="field" style="max-width:160px;">
+        <label for="f-tag">タグ</label>
+        <select id="f-tag">
+          <option value="terminal">Terminal</option>
+          <option value="ai">AI Agent</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="f-desc">説明</label>
+      <input type="text" id="f-desc" placeholder="このコマンド/コメントが何をするか">
+    </div>
+    <div class="field">
+      <label for="f-code">コマンド / コメント本文 <span style="color:var(--danger)" aria-hidden="true">*</span></label>
+        <textarea id="f-code" placeholder="wp transient delete --all" required></textarea>
+    </div>
+    <div class="form-actions">
+      <button type="button" class="btn btn-ghost" id="cancelAdd">キャンセル</button>
+      <button type="submit" class="btn btn-primary" id="saveAdd">保存</button>
+    </div>
+  </form>
+
+  <main class="list" id="list" aria-label="スニペット一覧"></main>
+  <div class="empty" id="emptyMsg" style="display:none;" role="status" aria-live="polite">該当するスニペットがありません</div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <!-- スクリーンリーダー用のアナウンサー領域 -->
+  <div id="sr-announcer" class="sr-only" aria-live="polite"></div>
+</div>
+</body>
+</html>
