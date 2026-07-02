@@ -35,9 +35,6 @@
       <div class="field" style="max-width:160px;">
         <label for="f-tag">タグ</label>
         <select id="f-tag">
-          <option value="terminal">Terminal</option>
-          <option value="ai">AI Agent</option>
-          <option value="other">Other</option>
         </select>
       </div>
     </div>
@@ -81,6 +78,33 @@
     <button type="button" class="btn-close" id="closeOptionsBtn" aria-label="設定を閉じる">&times;</button>
   </div>
   <div class="dialog-body">
+    <div class="dialog-section">
+      <h3 class="dialog-section-title">カテゴリ管理</h3>
+      <p class="dialog-desc">スニペットのカテゴリを追加・編集・削除できます。</p>
+      
+      <!-- カテゴリ一覧 -->
+      <div id="categoryManagerList" class="category-manager-list">
+        <!-- JSで動的生成 -->
+      </div>
+      
+      <!-- カテゴリ追加フォーム -->
+      <form id="categoryAddForm" class="category-add-form" aria-label="新しいカテゴリの追加">
+        <div class="category-form-row">
+          <input type="text" id="catAddName" placeholder="カテゴリ名（30文字以内）" required maxlength="30" aria-label="新規カテゴリ名">
+          <button type="submit" class="btn btn-primary" id="catAddBtn">追加</button>
+        </div>
+        <div class="category-color-selector">
+          <span class="color-selector-label">色:</span>
+          <div id="catAddColors" class="color-palette-radios">
+            <!-- JSで動的生成 -->
+          </div>
+        </div>
+        <div id="catAddError" class="field-hint danger-text" style="display:none;" role="alert"></div>
+      </form>
+    </div>
+
+    <div class="dialog-separator"></div>
+
     <div class="dialog-section">
       <h3 class="dialog-section-title">ローカルファイル</h3>
       <p class="dialog-desc">スニペットデータをJSONとしてインポート（復元）およびエクスポート（バックアップ）を行います。</p>

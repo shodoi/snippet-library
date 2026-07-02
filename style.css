@@ -203,13 +203,11 @@ h1{
 .card{
   background:var(--panel);
   border:1px solid var(--line);
-  border-left:3px solid var(--teal-dim);
+  border-left:3px solid var(--cat-color, var(--teal-dim));
   border-radius:8px;
   padding:14px 16px;
   position:relative;
 }
-.card[data-tag="ai"]{border-left-color:var(--amber-dim);}
-.card[data-tag="other"]{border-left-color:var(--line);}
 
 .card-head{
   display:flex;
@@ -225,12 +223,10 @@ h1{
   font-size:12px; /* 10.5pxから12pxへ拡大 */
   letter-spacing:.04em;
   text-transform:uppercase;
-  color:var(--teal);
+  color:var(--cat-color, var(--teal));
   white-space:nowrap;
   padding-top:2px;
 }
-.card[data-tag="ai"] .card-tag{color:var(--amber);}
-.card[data-tag="other"] .card-tag{color:var(--muted);}
 
 .code-row{
   display:flex;
@@ -242,12 +238,12 @@ h1{
 }
 .prompt-mark{
   font-family:var(--mono);
-  color:var(--teal-dim);
+  color:var(--cat-color, var(--teal-dim));
+  opacity: 0.8;
   font-size:13px;
   padding-top:1px;
   user-select:none;
 }
-.card[data-tag="ai"] .prompt-mark{color:var(--amber-dim);}
 pre.code{
   flex:1;
   margin:0;
@@ -589,5 +585,121 @@ dialog#optionsDialog input[type=text]:focus, dialog#optionsDialog input[type=pas
 }
 .error-actions .btn.danger:hover {
   filter: brightness(1.1);
+}
+
+/* カテゴリ管理UI */
+.category-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  background: var(--panel-2);
+}
+.category-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.category-item .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.category-item .label {
+  flex: 1;
+  font-size: 13.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.category-item .actions {
+  display: flex;
+  gap: 6px;
+}
+.category-item .actions .btn-cat {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--sans);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.category-item .actions .btn-cat:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.category-item .actions .btn-cat.danger:hover {
+  color: var(--danger);
+}
+
+.category-add-form {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+.category-form-row {
+  display: flex;
+  gap: 8px;
+}
+.category-form-row input[type="text"] {
+  flex: 1;
+}
+.category-color-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.color-selector-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.color-palette-radios {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.color-radio {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-block;
+  border: 2px solid transparent;
+  transition: transform 0.1s ease, border-color 0.1s ease;
+}
+.color-radio input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  margin: 0;
+}
+.color-radio:hover {
+  transform: scale(1.15);
+}
+.color-radio.selected {
+  border-color: var(--text);
+}
+.danger-text {
+  color: var(--danger) !important;
 }
 

@@ -1,8 +1,19 @@
 (function(){
   const STORAGE_KEY = 'snippets:v1';
-  const TAG_LABELS = { terminal:'Terminal', ai:'AI Agent', other:'Other' };
+  const CATEGORIES_STORAGE_KEY = 'snippets:categories:v1';
   const GIST_SETTINGS_KEY = 'snippets:gist:settings:v1';
   const GIST_TOKEN_KEY = 'snippets:gist:token:v1';
+
+  const CATEGORY_COLOR_PALETTE = [
+    '#5fb3a3', // teal(既存 terminal 色)
+    '#d9a441', // amber(既存 ai 色)
+    '#c96a5a', // coral
+    '#6a8fd9', // blue
+    '#9a7fd4', // purple
+    '#d47fa8', // pink
+    '#7fc47a', // green
+  ];
+  const UNCATEGORIZED_COLOR = '#8b8f98'; // 既定カテゴリ専用、選択肢には出さない
 
   // 安全なUUID生成 (crypto.randomUUIDのフォールバック)
   function generateUUID() {
@@ -53,13 +64,43 @@
     }
   };
 
+  // カテゴリデータの構造・内容バリデーション
+  function validateCategories(data) {
+    if (!Array.isArray(data)) return false;
+    
+    const ids = new Set();
+    let hasUncategorized = false;
+
+    for (const item of data) {
+      if (!item || typeof item !== 'object') return false;
+      const { id, label, color, protected: isProtected } = item;
+
+      if (typeof id !== 'string' || !id.trim()) return false;
+      if (typeof label !== 'string' || !label.trim() || label.length > 30) return false;
+      if (typeof isProtected !== 'boolean') return false;
+
+      // 色の検証: パレットまたは未分類専用色のいずれか
+      if (typeof color !== 'string') return false;
+      const isValidColor = CATEGORY_COLOR_PALETTE.includes(color) || color === UNCATEGORIZED_COLOR;
+      if (!isValidColor) return false;
+
+      if (ids.has(id)) return false;
+      ids.add(id);
+
+      if (id === 'uncategorized') {
+        hasUncategorized = true;
+      }
+    }
+
+    return hasUncategorized;
+  }
+
   // 読み込みデータの構造・内容バリデーション
   function validateSnippets(data) {
     if (!Array.isArray(data)) return false;
     if (data.length > 1000) return false; // 最大1000件までに制限
 
     const ids = new Set();
-    const allowedTags = Object.keys(TAG_LABELS);
 
     for (const item of data) {
       if (!item || typeof item !== 'object') return false;
@@ -69,15 +110,12 @@
       if (typeof id !== 'string' || !id.trim()) return false;
       if (typeof title !== 'string' || !title.trim()) return false;
       if (typeof desc !== 'string') return false;
-      if (typeof tag !== 'string') return false;
+      if (typeof tag !== 'string' || !tag.trim()) return false;
       if (typeof code !== 'string' || !code.trim()) return false;
 
       // IDの一意性チェック
       if (ids.has(id)) return false;
       ids.add(id);
-
-      // 許可タグチェック
-      if (!allowedTags.includes(tag)) return false;
 
       // 文字数上限チェック (安全のため)
       if (id.length > 100) return false;
@@ -87,6 +125,153 @@
     }
 
     return true;
+  }
+
+  // カテゴリの読み込み
+  async function loadCategories() {
+    try {
+      const res = await storage.get(CATEGORIES_STORAGE_KEY);
+      if (res && res.value) {
+        const parsed = JSON.parse(res.value);
+        if (validateCategories(parsed)) {
+          categories = parsed;
+          // uncategorizedの欠落チェック
+          if (!categories.find(c => c.id === 'uncategorized')) {
+            categories.unshift({ id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true });
+            await persistCategories();
+          }
+          return;
+        }
+      }
+      // 存在しない、またはバリデーションエラーの場合は、空にする（load() 内の移行処理に任せる）
+      categories = [];
+    } catch (e) {
+      console.error('Failed to load categories:', e);
+      categories = [];
+    }
+  }
+
+  // カテゴリの保存
+  async function persistCategories() {
+    try {
+      const result = await storage.set(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
+      if (!result) {
+        throw new Error('Storage write failed for categories');
+      }
+    } catch (e) {
+      console.error('Failed to persist categories:', e);
+      throw e;
+    }
+  }
+
+  // IDからカテゴリを取得 (見つからなければ「未分類」を返す)
+  function getCategoryById(id) {
+    const found = categories.find(c => c.id === id);
+    if (found) return found;
+    return categories.find(c => c.id === 'uncategorized') || { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true };
+  }
+
+  // カテゴリの追加
+  async function addCategory(label, color) {
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel || trimmedLabel.length > 30) {
+      throw new Error('カテゴリ名は1〜30文字で入力してください。');
+    }
+    if (!CATEGORY_COLOR_PALETTE.includes(color)) {
+      throw new Error('無効な色が選択されました。');
+    }
+
+    // 重複チェック (大文字小文字区別なし、前後空白なし)
+    const isDuplicate = categories.some(c => c.label.toLowerCase() === trimmedLabel.toLowerCase());
+    if (isDuplicate) {
+      throw new Error('既に同名のカテゴリが存在します。');
+    }
+
+    const newCategory = {
+      id: generateUUID(),
+      label: trimmedLabel,
+      color: color,
+      protected: false
+    };
+
+    categories.push(newCategory);
+    try {
+      await persistCategories();
+    } catch (e) {
+      categories.pop(); // ロールバック
+      throw e;
+    }
+  }
+
+  // カテゴリの編集
+  async function updateCategory(id, { label, color }) {
+    const trimmedLabel = label.trim();
+    if (!trimmedLabel || trimmedLabel.length > 30) {
+      throw new Error('カテゴリ名は1〜30文字で入力してください。');
+    }
+
+    const catIndex = categories.findIndex(c => c.id === id);
+    if (catIndex === -1) {
+      throw new Error('カテゴリが見つかりません。');
+    }
+
+    const category = categories[catIndex];
+    if (category.protected) {
+      throw new Error('このカテゴリは編集できません。');
+    }
+
+    if (!CATEGORY_COLOR_PALETTE.includes(color)) {
+      throw new Error('無効な色が選択されました。');
+    }
+
+    // 重複チェック (自分自身は除外)
+    const isDuplicate = categories.some(c => c.id !== id && c.label.toLowerCase() === trimmedLabel.toLowerCase());
+    if (isDuplicate) {
+      throw new Error('既に同名のカテゴリが存在します。');
+    }
+
+    const originalCategory = { ...category };
+    category.label = trimmedLabel;
+    category.color = color;
+
+    try {
+      await persistCategories();
+    } catch (e) {
+      categories[catIndex] = originalCategory; // ロールバック
+      throw e;
+    }
+  }
+
+  // カテゴリの削除
+  async function deleteCategory(id) {
+    const catIndex = categories.findIndex(c => c.id === id);
+    if (catIndex === -1) {
+      throw new Error('カテゴリが見つかりません。');
+    }
+
+    const category = categories[catIndex];
+    if (category.protected) {
+      throw new Error('このカテゴリは削除できません。');
+    }
+
+    const originalCategories = [...categories];
+    const originalSnippets = snippets.map(s => ({ ...s }));
+
+    // スニペットのタグを uncategorized に付け替え
+    snippets = snippets.map(s => s.tag === id ? { ...s, tag: 'uncategorized' } : s);
+    // カテゴリ削除
+    categories.splice(catIndex, 1);
+
+    try {
+      // 双方を永続化
+      await persist();
+      await persistCategories();
+    } catch (e) {
+      // ロールバック
+      snippets = originalSnippets;
+      categories = originalCategories;
+      throw e;
+    }
   }
 
   // コピー処理のフォールバック
@@ -132,6 +317,7 @@
   ];
 
   let snippets = [];
+  let categories = [];
   let activeTag = 'all';
   let searchTerm = '';
   let editingId = null;
@@ -365,23 +551,30 @@
   // Gist用データ検証
   function validateGistPayload(payload) {
     if (!payload || typeof payload !== 'object') return false;
-    if (payload.schemaVersion !== 1) return false;
     if (payload.app !== 'snippet-library') return false;
-    return validateSnippets(payload.snippets);
+    
+    if (payload.schemaVersion === 2) {
+      return validateCategories(payload.categories) && validateSnippets(payload.snippets);
+    } else if (payload.schemaVersion === 1) {
+      return validateSnippets(payload.snippets);
+    }
+    
+    return false;
   }
-
+ 
   async function pushToGist() {
     if (!gistToken.trim()) {
       throw new Error('GitHub Tokenが設定されていません');
     }
-
+ 
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       app: 'snippet-library',
       updatedAt: new Date().toISOString(),
+      categories: categories,
       snippets: snippets
     };
-
+ 
     let result;
     if (gistSettings.gistId) {
       result = await updateGist(gistToken, gistSettings.gistId, payload);
@@ -389,12 +582,12 @@
       result = await createGist(gistToken, payload);
       gistSettings.gistId = result.id;
     }
-
+ 
     gistSettings.lastPushedAt = payload.updatedAt;
     await saveGistSettings();
     return result;
   }
-
+ 
   async function pullFromGist() {
     if (!gistToken.trim()) {
       throw new Error('GitHub Tokenが設定されていません');
@@ -402,13 +595,13 @@
     if (!gistSettings.gistId.trim()) {
       throw new Error('Gist IDが設定されていません');
     }
-
+ 
     const payload = await fetchGist(gistToken, gistSettings.gistId);
     
     if (!validateGistPayload(payload)) {
       throw new Error('Gistのデータ形式が無効か、破損しています');
     }
-
+ 
     return payload;
   }
 
@@ -555,14 +748,56 @@
         const payload = await pullFromGist();
         setSyncState(false);
 
-        if (confirm(`Gistから ${payload.snippets.length} 件のスニペットを取得しました。現在のローカルデータを全て上書きしますが、よろしいですか？`)) {
+        let importSnippets = payload.snippets;
+        let importCategories = payload.categories || [];
+        const needsMigration = payload.schemaVersion === 1;
+
+        if (needsMigration) {
+          const terminalId = generateUUID();
+          const aiId = generateUUID();
+          importCategories = [
+            { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true },
+            { id: terminalId, label: 'Terminal', color: '#5fb3a3', protected: false },
+            { id: aiId, label: 'AI Agent', color: '#d9a441', protected: false }
+          ];
+          importSnippets = importSnippets.map(s => {
+            let newTag = 'uncategorized';
+            if (s.tag === 'terminal') newTag = terminalId;
+            else if (s.tag === 'ai') newTag = aiId;
+            return { ...s, tag: newTag };
+          });
+        } else {
+          // 存在しないカテゴリを参照しているスニペットは「未分類」に付け替え
+          const catIds = new Set(importCategories.map(c => c.id));
+          importSnippets = importSnippets.map(s => {
+            if (!catIds.has(s.tag)) {
+              return { ...s, tag: 'uncategorized' };
+            }
+            return s;
+          });
+        }
+
+        const confirmMsg = needsMigration
+          ? `Gistから ${importSnippets.length} 件のスニペットを取得しました。旧形式のデータであるため、新形式に変換して取り込みます。現在のローカルデータを全て上書きしますが、よろしいですか？`
+          : `Gistから ${importSnippets.length} 件のスニペットを取得しました。現在のローカルデータを全て上書きしますが、よろしいですか？`;
+
+        if (confirm(confirmMsg)) {
           setSyncState(true);
           const originalSnippets = snippets;
-          snippets = payload.snippets;
+          const originalCategories = categories;
+          snippets = importSnippets;
+          categories = importCategories;
           try {
             await persist();
+            await persistCategories();
             gistSettings.lastPulledAt = payload.updatedAt || new Date().toISOString();
             await saveGistSettings();
+            
+            if (activeTag !== 'all' && !categories.some(c => c.id === activeTag)) {
+              activeTag = 'all';
+            }
+            renderCategorySelect();
+            renderTagFilters();
             render();
             if (optionsDialog) {
               optionsDialog.close();
@@ -572,6 +807,7 @@
             alert('Gistからの読み込みが完了しました。');
           } catch (e) {
             snippets = originalSnippets;
+            categories = originalCategories;
             announce('ローカルデータの保存に失敗したため、読み込みをキャンセルしました。');
             alert('インポートに失敗しました。ローカルストレージへの書き込みエラーです。');
           }
@@ -598,12 +834,46 @@
     statusEl.textContent = '読み込み中…';
     try{
       await loadGistSettings();
+
+      // カテゴリのロード
+      const catRes = await storage.get(CATEGORIES_STORAGE_KEY);
+      let needsMigration = !catRes || !catRes.value;
+
+      let terminalId = '';
+      let aiId = '';
+
+      if (needsMigration) {
+        // 新規カテゴリの初期設定
+        terminalId = generateUUID();
+        aiId = generateUUID();
+        categories = [
+          { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true },
+          { id: terminalId, label: 'Terminal', color: '#5fb3a3', protected: false },
+          { id: aiId, label: 'AI Agent', color: '#d9a441', protected: false }
+        ];
+      } else {
+        await loadCategories();
+      }
+
       const res = await storage.get(STORAGE_KEY);
       if (!res || !res.value) {
         // 保存データが存在しない
         snippets = seed;
-        await persist();
+        if (needsMigration) {
+          // 初期データも新カテゴリIDに移行する
+          snippets = snippets.map(s => {
+            let newTag = 'uncategorized';
+            if (s.tag === 'terminal') newTag = terminalId;
+            else if (s.tag === 'ai') newTag = aiId;
+            return { ...s, tag: newTag };
+          });
+          await persist();
+          await persistCategories();
+        } else {
+          await persist();
+        }
         statusEl.textContent = '';
+        renderCategorySelect();
         renderTagFilters();
         render();
         return;
@@ -619,7 +889,19 @@
 
       if (!parseFailed && validateSnippets(parsed)) {
         snippets = parsed;
+        if (needsMigration) {
+          // 既存スニペットのタグをUUIDにマッピングする
+          snippets = snippets.map(s => {
+            let newTag = 'uncategorized';
+            if (s.tag === 'terminal') newTag = terminalId;
+            else if (s.tag === 'ai') newTag = aiId;
+            return { ...s, tag: newTag };
+          });
+          await persist();
+          await persistCategories();
+        }
         statusEl.textContent = '';
+        renderCategorySelect();
         renderTagFilters();
         render();
       } else {
@@ -645,13 +927,220 @@
     }
   }
 
+  function renderCategorySelect(){
+    const fTag = document.getElementById('f-tag');
+    if (!fTag) return;
+    fTag.innerHTML = '';
+    categories.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.label;
+      fTag.appendChild(opt);
+    });
+  }
+
+  let editingCategoryId = null;
+
+  function renderCategoryManager() {
+    const listEl = document.getElementById('categoryManagerList');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+
+    categories.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'category-item';
+      item.id = `cat-item-${c.id}`;
+
+      if (editingCategoryId === c.id) {
+        // 編集モード
+        item.innerHTML = `
+          <div class="category-edit-form" style="width: 100%; border: none; padding: 0; background: transparent; margin: 0;">
+            <div class="category-form-row">
+              <input type="text" id="catEditName-${c.id}" value="${c.label}" required maxlength="30" aria-label="カテゴリ名編集">
+              <button type="button" class="btn btn-primary" id="catSaveBtn-${c.id}">保存</button>
+              <button type="button" class="btn btn-ghost" id="catCancelBtn-${c.id}">キャンセル</button>
+            </div>
+            <div class="category-color-selector">
+              <span class="color-selector-label">色:</span>
+              <div id="catEditColors-${c.id}" class="color-palette-radios"></div>
+            </div>
+            <div id="catEditError-${c.id}" class="field-hint danger-text" style="display:none;" role="alert"></div>
+          </div>
+        `;
+        
+        // カラーパレットの生成
+        const colorsContainer = item.querySelector(`#catEditColors-${c.id}`);
+        let selectedColor = c.color;
+        CATEGORY_COLOR_PALETTE.forEach(color => {
+          const radio = document.createElement('label');
+          radio.className = 'color-radio' + (color === selectedColor ? ' selected' : '');
+          radio.style.backgroundColor = color;
+          radio.innerHTML = `<input type="radio" name="editColor-${c.id}" value="${color}" ${color === selectedColor ? 'checked' : ''}>`;
+          radio.addEventListener('change', (e) => {
+            if (e.target.checked) {
+              selectedColor = color;
+              item.querySelectorAll('.color-radio').forEach(r => r.classList.remove('selected'));
+              radio.classList.add('selected');
+            }
+          });
+          colorsContainer.appendChild(radio);
+        });
+
+        // 保存ボタンイベント
+        item.querySelector(`#catSaveBtn-${c.id}`).addEventListener('click', async () => {
+          const newName = item.querySelector(`#catEditName-${c.id}`).value.trim();
+          const errorEl = item.querySelector(`#catEditError-${c.id}`);
+          errorEl.style.display = 'none';
+
+          if (!newName || newName.length > 30) {
+            errorEl.textContent = 'カテゴリ名は1〜30文字で入力してください。';
+            errorEl.style.display = 'block';
+            return;
+          }
+
+          try {
+            await updateCategory(c.id, { label: newName, color: selectedColor });
+            editingCategoryId = null;
+            renderCategoryManager();
+            renderCategorySelect();
+            renderTagFilters();
+            render();
+            announce(`カテゴリ「${newName}」を更新しました。`);
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.style.display = 'block';
+          }
+        });
+
+        // キャンセルボタンイベント
+        item.querySelector(`#catCancelBtn-${c.id}`).addEventListener('click', () => {
+          editingCategoryId = null;
+          renderCategoryManager();
+        });
+
+      } else {
+        // 通常表示モード
+        item.innerHTML = `
+          <div class="swatch" style="background-color: ${c.color}"></div>
+          <span class="label">${c.label}</span>
+          <div class="actions">
+            ${c.protected ? '' : `
+              <button type="button" class="btn-cat edit-btn" aria-label="${c.label}を編集">編集</button>
+              <button type="button" class="btn-cat danger delete-btn" aria-label="${c.label}を削除">削除</button>
+            `}
+          </div>
+        `;
+
+        if (!c.protected) {
+          item.querySelector('.edit-btn').addEventListener('click', () => {
+            editingCategoryId = c.id;
+            renderCategoryManager();
+          });
+
+          item.querySelector('.delete-btn').addEventListener('click', async () => {
+            const count = snippets.filter(s => s.tag === c.id).length;
+            const confirmMsg = count > 0 
+              ? `このカテゴリに属する ${count} 件のスニペットは「未分類」に移動されます。このカテゴリ「${c.label}」を削除してもよろしいですか？`
+              : `カテゴリ「${c.label}」を削除してもよろしいですか？`;
+            
+            if (confirm(confirmMsg)) {
+              try {
+                await deleteCategory(c.id);
+                renderCategoryManager();
+                renderCategorySelect();
+                if (activeTag === c.id) {
+                  activeTag = 'all';
+                }
+                renderTagFilters();
+                render();
+                announce(`カテゴリ「${c.label}」を削除しました。`);
+              } catch (err) {
+                alert(`カテゴリの削除に失敗しました: ${err.message}`);
+              }
+            }
+          });
+        }
+      }
+      listEl.appendChild(item);
+    });
+
+    // 新規追加フォームのカラーパレット生成
+    const addColorsContainer = document.getElementById('catAddColors');
+    if (addColorsContainer) {
+      addColorsContainer.innerHTML = '';
+      let selectedColor = CATEGORY_COLOR_PALETTE[0];
+      CATEGORY_COLOR_PALETTE.forEach((color, idx) => {
+        const radio = document.createElement('label');
+        radio.className = 'color-radio' + (idx === 0 ? ' selected' : '');
+        radio.style.backgroundColor = color;
+        radio.innerHTML = `<input type="radio" name="addColor" value="${color}" ${idx === 0 ? 'checked' : ''}>`;
+        radio.addEventListener('change', (e) => {
+          if (e.target.checked) {
+            selectedColor = color;
+            addColorsContainer.querySelectorAll('.color-radio').forEach(r => r.classList.remove('selected'));
+            radio.classList.add('selected');
+          }
+        });
+        addColorsContainer.appendChild(radio);
+      });
+
+      // 新規追加のフォーム送信イベントリスナ登録
+      const addForm = document.getElementById('categoryAddForm');
+      if (addForm && !addForm.dataset.listenerRegistered) {
+        addForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const nameInput = document.getElementById('catAddName');
+          const errorEl = document.getElementById('catAddError');
+          const name = nameInput.value.trim();
+          errorEl.style.display = 'none';
+
+          if (!name || name.length > 30) {
+            errorEl.textContent = 'カテゴリ名は1〜30文字で入力してください。';
+            errorEl.style.display = 'block';
+            return;
+          }
+
+          const checkedRadio = addColorsContainer.querySelector('input[name="addColor"]:checked');
+          const color = checkedRadio ? checkedRadio.value : CATEGORY_COLOR_PALETTE[0];
+
+          try {
+            await addCategory(name, color);
+            nameInput.value = '';
+            const firstRadio = addColorsContainer.querySelector('input[name="addColor"]');
+            if (firstRadio) {
+              firstRadio.checked = true;
+              addColorsContainer.querySelectorAll('.color-radio').forEach(r => r.classList.remove('selected'));
+              firstRadio.parentElement.classList.add('selected');
+            }
+            renderCategoryManager();
+            renderCategorySelect();
+            renderTagFilters();
+            render();
+            announce(`カテゴリ「${name}」を追加しました。`);
+          } catch (err) {
+            errorEl.textContent = err.message;
+            errorEl.style.display = 'block';
+          }
+        });
+        addForm.dataset.listenerRegistered = 'true';
+      }
+    }
+  }
+
   function renderTagFilters(){
-    const tags = ['all', ...Object.keys(TAG_LABELS)];
+    const tags = ['all', ...categories.map(c => c.id)];
     tagFiltersEl.innerHTML = '';
     tags.forEach(t=>{
       const btn = document.createElement('button');
       btn.className = 'tag-btn' + (activeTag===t ? ' active':'');
-      btn.textContent = t==='all' ? 'すべて' : TAG_LABELS[t];
+      
+      let label = 'すべて';
+      if (t !== 'all') {
+        const cat = getCategoryById(t);
+        label = cat.label;
+      }
+      btn.textContent = label;
+      
       // WAI-ARIA: 現在のアクティブ状態を通知
       btn.setAttribute('aria-pressed', activeTag===t ? 'true' : 'false');
       btn.addEventListener('click', ()=>{
@@ -679,7 +1168,13 @@
     filtered.forEach(s=>{
       const card = document.createElement('div');
       card.className = 'card';
-      card.dataset.tag = s.tag;
+
+      const category = getCategoryById(s.tag);
+      card.style.setProperty('--cat-color', category.color);
+
+      // AI Agentタグの場合は '#'、それ以外は '$'
+      const isAI = category.label.toLowerCase() === 'ai agent';
+      const promptMark = isAI ? '#' : '$';
 
       card.innerHTML = `
         <div class="card-head">
@@ -690,7 +1185,7 @@
           <div class="card-tag"></div>
         </div>
         <div class="code-row">
-          <span class="prompt-mark" aria-hidden="true">${s.tag==='ai' ? '#' : '$'}</span>
+          <span class="prompt-mark" aria-hidden="true">${promptMark}</span>
           <pre class="code"></pre>
           <button type="button" class="copy-btn"></button>
         </div>
@@ -701,7 +1196,7 @@
       `;
       card.querySelector('.card-title').textContent = s.title;
       card.querySelector('.card-desc').textContent = s.desc;
-      card.querySelector('.card-tag').textContent = TAG_LABELS[s.tag] || s.tag;
+      card.querySelector('.card-tag').textContent = category.label;
       card.querySelector('.code').textContent = s.code;
 
       const copyBtn = card.querySelector('.copy-btn');
@@ -729,7 +1224,6 @@
       deleteBtn.setAttribute('aria-label', `${s.title}を削除`);
       let deleteTimer = null;
       deleteBtn.addEventListener('click', async ()=>{
-        // 2段階確認: 1回目 → 確認状態に変更、2回目 → 実際に削除
         if(!deleteBtn.classList.contains('confirming')){
           deleteBtn.textContent = '本当に削除？';
           deleteBtn.classList.add('confirming');
@@ -777,9 +1271,14 @@
     editingId = existing ? existing.id : null;
     lastActiveElement = triggerEl || document.activeElement;
 
+    // タグ選択肢の動的更新
+    renderCategorySelect();
+
+    const defaultTag = categories.find(c => !c.protected)?.id || categories[0]?.id || 'uncategorized';
+
     document.getElementById('f-title').value = existing ? existing.title : '';
     document.getElementById('f-desc').value = existing ? existing.desc : '';
-    document.getElementById('f-tag').value = existing ? existing.tag : 'terminal';
+    document.getElementById('f-tag').value = existing ? existing.tag : defaultTag;
     document.getElementById('f-code').value = existing ? existing.code : '';
     addForm.classList.add('open');
     addToggle.style.display = 'none';
@@ -792,7 +1291,6 @@
     addToggle.style.display = 'inline-flex';
     addToggle.setAttribute('aria-expanded', 'false');
     editingId = null;
-    // フォーカスをフォームを開いたときのトリガー要素に戻す
     if(lastActiveElement && typeof lastActiveElement.focus === 'function'){
       lastActiveElement.focus();
     }else{
@@ -851,7 +1349,14 @@
   // エクスポート機能
   function exportSnippets() {
     try {
-      const dataStr = JSON.stringify(snippets, null, 2);
+      const payload = {
+        schemaVersion: 2,
+        app: 'snippet-library',
+        exportedAt: new Date().toISOString(),
+        categories: categories,
+        snippets: snippets
+      };
+      const dataStr = JSON.stringify(payload, null, 2);
       const blob = new Blob([dataStr], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       
@@ -889,36 +1394,111 @@
     reader.onload = async (evt) => {
       try {
         const parsed = JSON.parse(evt.target.result);
-        if (!validateSnippets(parsed)) {
-          throw new Error('Invalid data structure');
+        let importCategories = [];
+        let importSnippets = [];
+        let needsMigration = false;
+
+        // ペイロード形式の検証
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const { schemaVersion, app, categories: parsedCats, snippets: parsedSnips } = parsed;
+          if (app !== 'snippet-library') {
+            throw new Error('無効なアプリケーションデータです。');
+          }
+          if (schemaVersion === 2) {
+            if (!validateCategories(parsedCats) || !validateSnippets(parsedSnips)) {
+              throw new Error('データ構造が無効か、破損しています。');
+            }
+            importCategories = parsedCats;
+            importSnippets = parsedSnips;
+          } else if (schemaVersion === 1) {
+            if (!validateSnippets(parsedSnips)) {
+              throw new Error('データ構造が無効か、破損しています。');
+            }
+            importSnippets = parsedSnips;
+            needsMigration = true;
+          } else {
+            throw new Error(`サポートされていないデータバージョンです（バージョン: ${schemaVersion}）。`);
+          }
+        } else if (Array.isArray(parsed)) {
+          if (!validateSnippets(parsed)) {
+            throw new Error('データ構造が無効か、破損しています。');
+          }
+          importSnippets = parsed;
+          needsMigration = true;
+        } else {
+          throw new Error('無効なデータ形式です。');
         }
 
-        if (!confirm(`インポートを実行すると、現在のデータが全て上書きされます。よろしいですか？（インポート件数: ${parsed.length}件）`)) {
+        if (needsMigration) {
+          const terminalId = generateUUID();
+          const aiId = generateUUID();
+          importCategories = [
+            { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true },
+            { id: terminalId, label: 'Terminal', color: '#5fb3a3', protected: false },
+            { id: aiId, label: 'AI Agent', color: '#d9a441', protected: false }
+          ];
+
+          importSnippets = importSnippets.map(s => {
+            let newTag = 'uncategorized';
+            if (s.tag === 'terminal') newTag = terminalId;
+            else if (s.tag === 'ai') newTag = aiId;
+            return { ...s, tag: newTag };
+          });
+        } else {
+          // 存在しないカテゴリを参照しているスニペットは「未分類」に付け替え
+          const catIds = new Set(importCategories.map(c => c.id));
+          importSnippets = importSnippets.map(s => {
+            if (!catIds.has(s.tag)) {
+              return { ...s, tag: 'uncategorized' };
+            }
+            return s;
+          });
+        }
+
+        const confirmMsg = needsMigration 
+          ? `旧形式のデータを新形式に変換して取り込みます。インポートを実行すると、現在のデータが全て上書きされます。よろしいですか？（インポート件数: ${importSnippets.length}件）`
+          : `インポートを実行すると、現在のデータが全て上書きされます。よろしいですか？（インポート件数: ${importSnippets.length}件）`;
+
+        if (!confirm(confirmMsg)) {
           importFile.value = '';
           return;
         }
 
         const originalSnippets = snippets;
-        snippets = parsed;
+        const originalCategories = categories;
+
+        snippets = importSnippets;
+        categories = importCategories;
+
         try {
           await persist();
+          await persistCategories();
+          
+          if (activeTag !== 'all' && !categories.some(c => c.id === activeTag)) {
+            activeTag = 'all';
+          }
+          renderCategorySelect();
+          renderTagFilters();
           render();
+          
           if (optionsDialog) {
             optionsDialog.close();
           }
-          announce(`スニペットデータをインポートしました。計 ${parsed.length} 件を取り込みました。`);
+          announce(`スニペットデータをインポートしました。計 ${snippets.length} 件を取り込みました。`);
           statusEl.textContent = 'インポート完了';
           setTimeout(() => { statusEl.textContent = ''; }, 2000);
         } catch (e) {
           snippets = originalSnippets;
+          categories = originalCategories;
           announce('インポートに失敗しました。保存できませんでした。');
           statusEl.textContent = 'インポート失敗: 保存エラー';
           setTimeout(() => { statusEl.textContent = ''; }, 3000);
         }
       } catch (err) {
         console.error('Import failed:', err);
-        announce('インポートに失敗しました。無効なファイル形式です。');
-        statusEl.textContent = 'インポート失敗: 無効なデータ形式';
+        announce(`インポートに失敗しました。${err.message}`);
+        statusEl.textContent = 'インポート失敗: エラー';
+        alert(`インポートに失敗しました。\n理由: ${err.message}`);
         setTimeout(() => { statusEl.textContent = ''; }, 3000);
       }
       importFile.value = '';
@@ -937,6 +1517,7 @@
   if (openOptionsBtn && optionsDialog) {
     openOptionsBtn.addEventListener('click', () => {
       updateGistUI();
+      renderCategoryManager();
       optionsDialog.showModal();
     });
   }
