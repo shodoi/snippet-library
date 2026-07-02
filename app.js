@@ -3,6 +3,7 @@
   const CATEGORIES_STORAGE_KEY = 'snippets:categories:v1';
   const GIST_SETTINGS_KEY = 'snippets:gist:settings:v1';
   const GIST_TOKEN_KEY = 'snippets:gist:token:v1';
+  const THEME_STORAGE_KEY = 'snippets:theme:v1';
 
   const CATEGORY_COLOR_PALETTE = [
     '#5fb3a3', // teal(既存 terminal 色)
@@ -339,6 +340,13 @@
   const openOptionsBtn = document.getElementById('openOptionsBtn');
   const closeOptionsBtn = document.getElementById('closeOptionsBtn');
 
+  // テーマ切り替え DOM 要素
+  const themeBtn = document.getElementById('themeBtn');
+  const themeBtnIcon = document.getElementById('themeBtnIcon');
+  const themeMenuContainer = document.getElementById('themeMenuContainer');
+  const themeMenu = document.getElementById('themeMenu');
+  const themeMenuItems = themeMenu ? themeMenu.querySelectorAll('.theme-menu-item') : [];
+
   // Gist 同期用 DOM 要素
   const gistTokenEl = document.getElementById('gistToken');
   const gistIdEl = document.getElementById('gistId');
@@ -356,6 +364,138 @@
     setTimeout(() => {
       srAnnouncer.textContent = message;
     }, 100);
+  }
+
+  // テーマ管理ロジック
+  let currentTheme = 'system';
+  const themeIcons = {
+    light: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>`,
+    dark: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>`,
+    system: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>`
+  };
+
+  function applyTheme(theme) {
+    currentTheme = theme;
+    let isDark = false;
+    if (theme === 'dark') {
+      isDark = true;
+    } else if (theme === 'light') {
+      isDark = false;
+    } else {
+      isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    
+    // UIの更新
+    if (themeBtnIcon) {
+      themeBtnIcon.innerHTML = themeIcons[theme] || themeIcons.system;
+    }
+
+    if (themeMenuItems) {
+      themeMenuItems.forEach(item => {
+        const val = item.getAttribute('data-theme-val');
+        if (val === theme) {
+          item.classList.add('active');
+          item.setAttribute('aria-selected', 'true');
+        } else {
+          item.classList.remove('active');
+          item.setAttribute('aria-selected', 'false');
+        }
+      });
+    }
+
+    // スクリーンリーダー向けにラベル変更
+    if (themeBtn) {
+      const themeLabels = { light: 'ライトテーマ', dark: 'ダークテーマ', system: 'デバイス設定連動テーマ' };
+      themeBtn.setAttribute('aria-label', `テーマ切り替え。現在の設定: ${themeLabels[theme]}`);
+    }
+  }
+
+  // システムの配色変更リスナー
+  const systemThemeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  function handleSystemThemeChange(e) {
+    if (currentTheme === 'system') {
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+    }
+  }
+  systemThemeMediaQuery.addEventListener('change', handleSystemThemeChange);
+
+  // テーマ切り替えUI制御
+  function toggleThemeMenu(show) {
+    if (!themeMenuContainer || !themeBtn) return;
+    const isCurrentlyOpen = themeMenuContainer.classList.contains('open');
+    const shouldOpen = show !== undefined ? show : !isCurrentlyOpen;
+    
+    if (shouldOpen) {
+      themeMenuContainer.classList.add('open');
+      themeBtn.setAttribute('aria-expanded', 'true');
+      // 最初のアクティブな項目にフォーカス
+      const activeItem = themeMenu ? themeMenu.querySelector('.theme-menu-item.active') : null;
+      if (activeItem) {
+        activeItem.focus();
+      } else if (themeMenuItems.length > 0) {
+        themeMenuItems[0].focus();
+      }
+    } else {
+      themeMenuContainer.classList.remove('open');
+      themeBtn.setAttribute('aria-expanded', 'false');
+      themeBtn.focus();
+    }
+  }
+
+  function initThemeEvents() {
+    if (!themeBtn || !themeMenuContainer) return;
+
+    themeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleThemeMenu();
+    });
+
+    // 項目選択
+    if (themeMenuItems) {
+      themeMenuItems.forEach(item => {
+        item.addEventListener('click', async (e) => {
+          const val = item.getAttribute('data-theme-val');
+          applyTheme(val);
+          await storage.set(THEME_STORAGE_KEY, val);
+          toggleThemeMenu(false);
+          announce(`テーマを「${item.querySelector('.theme-menu-text').textContent}」に変更しました。`);
+        });
+      });
+    }
+
+    // 外部クリックで閉じる
+    document.addEventListener('click', (e) => {
+      if (themeMenuContainer.classList.contains('open') && !themeMenuContainer.contains(e.target) && e.target !== themeBtn) {
+        toggleThemeMenu(false);
+      }
+    });
+
+    // キーボードナビゲーション
+    themeMenuContainer.addEventListener('keydown', (e) => {
+      if (!themeMenuContainer.classList.contains('open')) return;
+
+      const items = Array.from(themeMenuItems);
+      const currentIndex = items.indexOf(document.activeElement);
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        toggleThemeMenu(false);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const nextIndex = (currentIndex + 1) % items.length;
+        items[nextIndex].focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prevIndex = (currentIndex - 1 + items.length) % items.length;
+        items[prevIndex].focus();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        if (currentIndex !== -1) {
+          items[currentIndex].click();
+        }
+      }
+    });
   }
 
   // 破損データ時のエラー表示
@@ -833,6 +973,11 @@
   async function load(){
     statusEl.textContent = '読み込み中…';
     try{
+      // テーマの復元
+      const savedThemeRes = await storage.get(THEME_STORAGE_KEY);
+      const savedTheme = (savedThemeRes && savedThemeRes.value) ? savedThemeRes.value : 'system';
+      applyTheme(savedTheme);
+
       await loadGistSettings();
 
       // カテゴリのロード
@@ -931,7 +1076,8 @@
     const fTag = document.getElementById('f-tag');
     if (!fTag) return;
     fTag.innerHTML = '';
-    categories.forEach(c => {
+    const sortedCats = [...categories].sort((a, b) => (a.id === 'uncategorized' ? 1 : b.id === 'uncategorized' ? -1 : 0));
+    sortedCats.forEach(c => {
       const opt = document.createElement('option');
       opt.value = c.id;
       opt.textContent = c.label;
@@ -946,7 +1092,8 @@
     if (!listEl) return;
     listEl.innerHTML = '';
 
-    categories.forEach(c => {
+    const sortedCats = [...categories].sort((a, b) => (a.id === 'uncategorized' ? 1 : b.id === 'uncategorized' ? -1 : 0));
+    sortedCats.forEach(c => {
       const item = document.createElement('div');
       item.className = 'category-item';
       item.id = `cat-item-${c.id}`;
@@ -1128,18 +1275,22 @@
   }
 
   function renderTagFilters(){
-    const tags = ['all', ...categories.map(c => c.id)];
+    const sortedCats = [...categories].sort((a, b) => (a.id === 'uncategorized' ? 1 : b.id === 'uncategorized' ? -1 : 0));
+    const tags = ['all', ...sortedCats.map(c => c.id)];
     tagFiltersEl.innerHTML = '';
     tags.forEach(t=>{
       const btn = document.createElement('button');
       btn.className = 'tag-btn' + (activeTag===t ? ' active':'');
       
       let label = 'すべて';
+      let catColor = 'var(--teal)';
       if (t !== 'all') {
         const cat = getCategoryById(t);
         label = cat.label;
+        catColor = cat.color;
       }
       btn.textContent = label;
+      btn.style.setProperty('--cat-color', catColor);
       
       // WAI-ARIA: 現在のアクティブ状態を通知
       btn.setAttribute('aria-pressed', activeTag===t ? 'true' : 'false');
@@ -1539,6 +1690,7 @@
   importFile.addEventListener('change', handleImport);
 
   registerGistListeners();
+  initThemeEvents();
 
   load();
 })();
