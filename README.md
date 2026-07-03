@@ -23,7 +23,9 @@
 
 ```text
 snippet-library/
-├── index.html       # アプリケーション本体 (HTML, CSS, JS)
+├── index.html       # メインHTML
+├── style.css        # スタイルシート
+├── app.js           # アプリケーションロジック
 ├── README.md        # 本書
 └── .docs/
     └── plans/       # 改善計画などのアーカイブ資料
@@ -31,8 +33,10 @@ snippet-library/
 
 ## 動作方法
 
-### 1. ブラウザで直接開く
-`index.html` ファイルを Chrome、Edge、Safari などのモダンブラウザにドラッグ＆ドロップするか、ダブルクリックするだけで、特別な設定なしでそのまま動作します。
+### 1. GitHub Pages でアクセスする
+特別な設定なしで、ブラウザから以下の URL にアクセスするだけで動作します。
+
+[https://shodoi.github.io/snippet-library/](https://shodoi.github.io/snippet-library/)
 
 ### 2. ローカル HTTP サーバーで起動する
 Node.js や Python などがインストールされている場合、ローカルサーバーを起動して実行することも可能です。
