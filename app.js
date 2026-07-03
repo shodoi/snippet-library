@@ -402,6 +402,11 @@
           item.setAttribute('aria-selected', 'false');
         }
       });
+      // aria-activedescendant で現在選択中の項目をスクリーンリーダーに通知
+      if (themeMenu) {
+        const activeItem = themeMenu.querySelector('.theme-menu-item.active');
+        themeMenu.setAttribute('aria-activedescendant', activeItem ? activeItem.id : '');
+      }
     }
 
     // スクリーンリーダー向けにラベル変更
@@ -501,17 +506,30 @@
   // 破損データ時のエラー表示
   function showCorruptedDataError(rawText) {
     statusEl.textContent = 'データエラー';
-    listEl.innerHTML = `
-      <div class="error-panel">
-        <h3>データの読み込みに失敗しました</h3>
-        <p>保存されているデータが破損しているか、無効な形式です。データを保護するため、初期データでの自動上書きは行いませんでした。</p>
-        <p>以下のいずれかの操作を行ってください：</p>
-        <div class="error-actions">
-          <button type="button" id="btn-export-corrupted" class="btn">破損データをダウンロード</button>
-          <button type="button" id="btn-reset-corrupted" class="btn danger">データをリセット（初期化）</button>
-        </div>
-      </div>
-    `;
+    listEl.innerHTML = '';
+    const panel = document.createElement('div');
+    panel.className = 'error-panel';
+    const h3 = document.createElement('h3');
+    h3.textContent = 'データの読み込みに失敗しました';
+    const p1 = document.createElement('p');
+    p1.textContent = '保存されているデータが破損しているか、無効な形式です。データを保護するため、初期データでの自動上書きは行いませんでした。';
+    const p2 = document.createElement('p');
+    p2.textContent = '以下のいずれかの操作を行ってください：';
+    const actions = document.createElement('div');
+    actions.className = 'error-actions';
+    const exportBtn = document.createElement('button');
+    exportBtn.type = 'button';
+    exportBtn.id = 'btn-export-corrupted';
+    exportBtn.className = 'btn';
+    exportBtn.textContent = '破損データをダウンロード';
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.id = 'btn-reset-corrupted';
+    resetBtn.className = 'btn danger';
+    resetBtn.textContent = 'データをリセット（初期化）';
+    actions.append(exportBtn, resetBtn);
+    panel.append(h3, p1, p2, actions);
+    listEl.appendChild(panel);
     emptyEl.style.display = 'none';
 
     document.getElementById('btn-export-corrupted').addEventListener('click', () => {
@@ -667,8 +685,16 @@
     return await gistRequest('POST', 'https://api.github.com/gists', token, body);
   }
 
+  // Gist ID の形式バリデーション
+  function isValidGistId(id) {
+    return typeof id === 'string' && /^[a-f0-9]+$/.test(id);
+  }
+
   // 既存 Gist 更新
   async function updateGist(token, gistId, payload) {
+    if (!isValidGistId(gistId)) {
+      throw new Error('Gist IDの形式が無効です（16進英数字のみ使用できます）');
+    }
     const body = {
       files: {
         'snippets.json': {
@@ -681,6 +707,9 @@
 
   // Gist 読み込み
   async function fetchGist(token, gistId) {
+    if (!isValidGistId(gistId)) {
+      throw new Error('Gist IDの形式が無効です（16進英数字のみ使用できます）');
+    }
     const data = await gistRequest('GET', `https://api.github.com/gists/${gistId}`, token);
     if (!data.files || !data.files['snippets.json']) {
       throw new Error('Gist内に snippets.json が見つかりません');
@@ -1099,21 +1128,50 @@
       item.id = `cat-item-${c.id}`;
 
       if (editingCategoryId === c.id) {
-        // 編集モード
-        item.innerHTML = `
-          <div class="category-edit-form" style="width: 100%; border: none; padding: 0; background: transparent; margin: 0;">
-            <div class="category-form-row">
-              <input type="text" id="catEditName-${c.id}" value="${c.label}" required maxlength="30" aria-label="カテゴリ名編集">
-              <button type="button" class="btn btn-primary" id="catSaveBtn-${c.id}">保存</button>
-              <button type="button" class="btn btn-ghost" id="catCancelBtn-${c.id}">キャンセル</button>
-            </div>
-            <div class="category-color-selector">
-              <span class="color-selector-label">色:</span>
-              <div id="catEditColors-${c.id}" class="color-palette-radios"></div>
-            </div>
-            <div id="catEditError-${c.id}" class="field-hint danger-text" style="display:none;" role="alert"></div>
-          </div>
-        `;
+        // 編集モード — DOM API でユーザーデータを安全に埋め込み
+        const editForm = document.createElement('div');
+        editForm.className = 'category-edit-form';
+        editForm.style.cssText = 'width: 100%; border: none; padding: 0; background: transparent; margin: 0;';
+
+        const formRow = document.createElement('div');
+        formRow.className = 'category-form-row';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.id = `catEditName-${c.id}`;
+        nameInput.value = c.label;
+        nameInput.required = true;
+        nameInput.maxLength = 30;
+        nameInput.setAttribute('aria-label', 'カテゴリ名編集');
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn btn-primary';
+        saveBtn.id = `catSaveBtn-${c.id}`;
+        saveBtn.textContent = '保存';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-ghost';
+        cancelBtn.id = `catCancelBtn-${c.id}`;
+        cancelBtn.textContent = 'キャンセル';
+        formRow.append(nameInput, saveBtn, cancelBtn);
+
+        const colorSelector = document.createElement('div');
+        colorSelector.className = 'category-color-selector';
+        const colorLabel = document.createElement('span');
+        colorLabel.className = 'color-selector-label';
+        colorLabel.textContent = '色:';
+        const colorsDiv = document.createElement('div');
+        colorsDiv.id = `catEditColors-${c.id}`;
+        colorsDiv.className = 'color-palette-radios';
+        colorSelector.append(colorLabel, colorsDiv);
+
+        const errorDiv = document.createElement('div');
+        errorDiv.id = `catEditError-${c.id}`;
+        errorDiv.className = 'field-hint danger-text';
+        errorDiv.style.display = 'none';
+        errorDiv.setAttribute('role', 'alert');
+
+        editForm.append(formRow, colorSelector, errorDiv);
+        item.appendChild(editForm);
         
         // カラーパレットの生成
         const colorsContainer = item.querySelector(`#catEditColors-${c.id}`);
@@ -1166,17 +1224,30 @@
         });
 
       } else {
-        // 通常表示モード
-        item.innerHTML = `
-          <div class="swatch" style="background-color: ${c.color}"></div>
-          <span class="label">${c.label}</span>
-          <div class="actions">
-            ${c.protected ? '' : `
-              <button type="button" class="btn-cat edit-btn" aria-label="${c.label}を編集">編集</button>
-              <button type="button" class="btn-cat danger delete-btn" aria-label="${c.label}を削除">削除</button>
-            `}
-          </div>
-        `;
+        // 通常表示モード — DOM API でユーザーデータを安全に埋め込み
+        const swatch = document.createElement('div');
+        swatch.className = 'swatch';
+        swatch.style.backgroundColor = c.color;
+        swatch.setAttribute('aria-hidden', 'true');
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'label';
+        labelSpan.textContent = c.label;
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'actions';
+        if (!c.protected) {
+          const editBtnEl = document.createElement('button');
+          editBtnEl.type = 'button';
+          editBtnEl.className = 'btn-cat edit-btn';
+          editBtnEl.setAttribute('aria-label', `${c.label}を編集`);
+          editBtnEl.textContent = '編集';
+          const deleteBtnEl = document.createElement('button');
+          deleteBtnEl.type = 'button';
+          deleteBtnEl.className = 'btn-cat danger delete-btn';
+          deleteBtnEl.setAttribute('aria-label', `${c.label}を削除`);
+          deleteBtnEl.textContent = '削除';
+          actionsDiv.append(editBtnEl, deleteBtnEl);
+        }
+        item.append(swatch, labelSpan, actionsDiv);
 
         if (!c.protected) {
           item.querySelector('.edit-btn').addEventListener('click', () => {
@@ -1378,9 +1449,12 @@
         if(!deleteBtn.classList.contains('confirming')){
           deleteBtn.textContent = '本当に削除？';
           deleteBtn.classList.add('confirming');
+          deleteBtn.setAttribute('aria-label', `${s.title}を本当に削除しますか？もう一度押すと削除されます`);
+          announce(`${s.title}の削除確認中。もう一度ボタンを押すと削除されます。`);
           deleteTimer = setTimeout(()=>{
             deleteBtn.textContent = '削除';
             deleteBtn.classList.remove('confirming');
+            deleteBtn.setAttribute('aria-label', `${s.title}を削除`);
           }, 3000);
           return;
         }

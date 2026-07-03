@@ -2,22 +2,6 @@
   /* フォント定義 */
   --mono: ui-monospace, "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
   --sans: "Hiragino Kaku Gothic ProN", "Yu Gothic", ui-sans-serif, system-ui, sans-serif;
-
-  /* デフォルト（ダークテーマ） */
-  --ink: #1a1d21;
-  --panel: #212429;
-  --panel-2: #262a30;
-  --line: #444b54;
-  --text: #f8f9fa;
-  /* 白を強調 (#e8e6e1から変更) */
-  --code-text: #e8e6e1;
-  /* コード用の色を定義 */
-  --muted: #a3a7b2;
-  --teal: #5fb3a3;
-  --teal-dim: #3a6f65;
-  --amber: #d9a441;
-  --amber-dim: #8c6a2c;
-  --danger: #c96a5a;
 }
 
 /* 明示的なダークテーマ */
@@ -132,6 +116,7 @@ h1 {
   margin: 6px 0 4px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  text-wrap: balance;
 }
 
 .sub {
@@ -142,7 +127,7 @@ h1 {
 .toolbar {
   display: flex;
   gap: 12px;
-  margin: 24px 0 20px;
+  margin: 24px 0 34px;
   flex-wrap: wrap;
   align-items: center;
 }
@@ -360,6 +345,9 @@ h1 {
 .card-title {
   font-size: 16px;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: break-word;
 }
 
 .card-desc {
@@ -498,9 +486,29 @@ pre.code {
   padding: 0;
   margin: -1px;
   overflow: hidden;
-  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* スキップリンク: フォーカス時に表示 */
+.skip-link:focus {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  width: auto;
+  height: auto;
+  padding: 8px 16px;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  background: var(--teal);
+  color: #0d1a17;
+  font-weight: 600;
+  font-size: 14px;
+  border-radius: 6px;
+  z-index: 10000;
+  text-decoration: none;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -679,7 +687,7 @@ dialog#optionsDialog input[type=password]:focus {
 }
 
 .password-input-wrapper input {
-  padding-right: 40px !important;
+  padding-right: 40px;
 }
 
 .btn-toggle-password {
@@ -743,6 +751,7 @@ dialog#optionsDialog input[type=password]:focus {
   margin: 16px 0;
   font-family: var(--mono);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .gist-status-info p {
@@ -945,7 +954,7 @@ dialog#optionsDialog input[type=password]:focus {
 }
 
 .danger-text {
-  color: var(--danger) !important;
+  color: var(--danger);
 }
 
 /* ライトテーマ時の特定要素の調整 */

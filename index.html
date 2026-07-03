@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="よく使うターミナルコマンドやAIエージェント向け指示をまとめてコピーできるスニペット管理ツール">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.github.com; img-src 'self' data:; font-src 'self'; frame-ancestors 'none';">
 <title>スニペット帳</title>
 <link rel="stylesheet" href="style.css">
 <script>
@@ -15,6 +17,7 @@
 <script src="app.js" defer></script>
 </head>
 <body>
+<a href="#list" class="sr-only skip-link">メインコンテンツへスキップ</a>
 <div class="wrap">
   <header class="header">
     <div class="header-main">
@@ -32,19 +35,19 @@
         </button>
         <div class="theme-menu-container" id="themeMenuContainer">
           <ul class="theme-menu" id="themeMenu" role="listbox" aria-label="テーマ選択">
-            <li role="option" data-theme-val="light" class="theme-menu-item" tabindex="-1">
+            <li role="option" id="theme-opt-light" data-theme-val="light" class="theme-menu-item" tabindex="-1">
               <span class="theme-menu-icon" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg>
               </span>
               <span class="theme-menu-text">ライト</span>
             </li>
-            <li role="option" data-theme-val="dark" class="theme-menu-item" tabindex="-1">
+            <li role="option" id="theme-opt-dark" data-theme-val="dark" class="theme-menu-item" tabindex="-1">
               <span class="theme-menu-icon" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path></svg>
               </span>
               <span class="theme-menu-text">ダーク</span>
             </li>
-            <li role="option" data-theme-val="system" class="theme-menu-item" tabindex="-1">
+            <li role="option" id="theme-opt-system" data-theme-val="system" class="theme-menu-item" tabindex="-1">
               <span class="theme-menu-icon" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
               </span>
@@ -69,21 +72,21 @@
     <div class="form-row">
       <div class="field">
         <label for="f-title">タイトル <span style="color:var(--danger)" aria-hidden="true">*</span></label>
-        <input type="text" id="f-title" placeholder="例: トランジェント全削除" required>
+        <input type="text" id="f-title" name="title" autocomplete="off" placeholder="例: トランジェント全削除…" required>
       </div>
       <div class="field" style="max-width:160px;">
         <label for="f-tag">タグ</label>
-        <select id="f-tag">
+        <select id="f-tag" name="tag">
         </select>
       </div>
     </div>
     <div class="field">
       <label for="f-desc">説明</label>
-      <input type="text" id="f-desc" placeholder="このコマンド/コメントが何をするか">
+      <input type="text" id="f-desc" name="description" autocomplete="off" placeholder="このコマンド/コメントが何をするか…">
     </div>
     <div class="field">
       <label for="f-code">コマンド / コメント本文 <span style="color:var(--danger)" aria-hidden="true">*</span></label>
-        <textarea id="f-code" placeholder="wp transient delete --all" required></textarea>
+        <textarea id="f-code" name="code" autocomplete="off" placeholder="wp transient delete --all…" required></textarea>
     </div>
     <div class="form-actions">
       <button type="button" class="btn btn-ghost" id="cancelAdd">キャンセル</button>
@@ -101,7 +104,6 @@
     </div>
     <div class="tags" id="tagFilters" role="group" aria-label="カテゴリタグ"></div>
   </section>
-  <div style="height:14px"></div>
 
   <main class="list" id="list" aria-label="スニペット一覧"></main>
   <div class="empty" id="emptyMsg" style="display:none;" role="status" aria-live="polite">該当するスニペットがありません</div>
@@ -134,7 +136,7 @@
         </div>
         <div class="category-color-selector">
           <span class="color-selector-label">色:</span>
-          <div id="catAddColors" class="color-palette-radios">
+          <div id="catAddColors" class="color-palette-radios" role="radiogroup" aria-label="カテゴリの色">
             <!-- JSで動的生成 -->
           </div>
         </div>
