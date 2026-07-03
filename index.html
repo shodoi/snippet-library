@@ -165,42 +165,66 @@
         <p class="dialog-desc-warn">※ Gistは非公開（Secret）で作成されますが、URLを知っている人はアクセスできる可能性があるため、パスワードやAPIキーなどの機密情報をスニペットに含めないでください。</p>
       </div>
 
-      <div class="field">
-        <label for="gistToken">GitHub Personal Access Token <span style="color:var(--danger)" aria-hidden="true">*</span></label>
-        <div class="password-input-wrapper">
-          <input type="password" id="gistToken" placeholder="ghp_... または github_pat_..." aria-describedby="gist-token-desc">
-          <button type="button" id="toggleTokenVisibility" class="btn-toggle-password" aria-label="トークンを表示する">
-            <svg class="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
+      <!-- 1. 未接続時の設定ビュー -->
+      <div id="gistSetupView" style="display: block;">
+        <div class="field">
+          <label for="gistToken">GitHub Personal Access Token <span style="color:var(--danger)" aria-hidden="true">*</span></label>
+          <div class="password-input-wrapper">
+            <input type="password" id="gistToken" placeholder="ghp_... または github_pat_..." aria-describedby="gist-token-desc">
+            <button type="button" id="toggleTokenVisibility" class="btn-toggle-password" aria-label="トークンを表示する">
+              <svg class="eye-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+            </button>
+          </div>
+          <div class="token-storage-select">
+            <span class="storage-label">トークン保存方法:</span>
+            <label><input type="radio" name="tokenStorage" value="session" checked> セッション限り (推奨)</label>
+            <label><input type="radio" name="tokenStorage" value="local"> ブラウザに永続保存</label>
+          </div>
+          <p id="gist-token-desc" class="field-hint">※「gists」スコープ（権限）が必要です。</p>
         </div>
-        <div class="token-storage-select">
-          <span class="storage-label">トークン保存方法:</span>
-          <label><input type="radio" name="tokenStorage" value="session" checked> セッション限り (推奨)</label>
-          <label><input type="radio" name="tokenStorage" value="local"> ブラウザに永続保存</label>
+
+        <div class="field">
+          <label for="gistId">Gist ID</label>
+          <input type="text" id="gistId" placeholder="未入力の場合は保存時に新規作成されます">
         </div>
-        <p id="gist-token-desc" class="field-hint">※「gists」スコープ（権限）が必要です。</p>
+
+        <div class="field" style="margin-top: 14px;">
+          <button type="button" class="btn btn-primary" id="gistConnectBtn" style="width: 100%;" aria-label="Gistに接続して同期する">Gistに接続して同期</button>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="gistId">Gist ID</label>
-        <input type="text" id="gistId" placeholder="未入力の場合は保存時に新規作成されます">
-      </div>
+      <!-- 2. 接続完了後のビュー -->
+      <div id="gistConnectedView" style="display: none;">
+        <div class="gist-status-info">
+          <p>接続状態: <span style="color: var(--teal); font-weight: 600;">接続済み</span></p>
+          <p>使用中の Gist ID: <span id="connectedGistIdText" style="word-break: break-all;">-</span></p>
+          <p>最終保存: <span id="lastPushedAtText">未保存</span></p>
+          <p>最終読込: <span id="lastPulledAtText">未読込</span></p>
+        </div>
 
-      <div class="gist-status-info">
-        <p>最終保存: <span id="lastPushedAtText">未保存</span></p>
-        <p>最終読込: <span id="lastPulledAtText">未読込</span></p>
-      </div>
+        <div class="options-actions" style="margin-bottom: 12px; display: flex; gap: 8px;">
+          <button type="button" class="btn btn-ghost danger" id="gistDeleteBtn" aria-label="Gistの接続を解除する" style="flex: 1;">接続を解除</button>
+          <button type="button" class="btn btn-primary" id="gistSyncBtn" aria-label="今すぐ手動で同期する" style="flex: 2;">今すぐ手動同期</button>
+        </div>
 
-      <div class="options-actions">
-        <button type="button" class="btn btn-ghost danger" id="gistDeleteBtn" aria-label="Gistの設定情報を削除">Tokenを削除</button>
-        <button type="button" class="btn btn-ghost" id="gistPullBtn" aria-label="Gistからデータを取得して上書き">Gistから読み込み</button>
-        <button type="button" class="btn btn-primary" id="gistPushBtn" aria-label="現在のデータをGistに保存">Gistへ保存</button>
+        <!-- 高度な操作（強制個別操作） -->
+        <details class="gist-advanced-ops" style="font-size: 13px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; padding: 8px;">
+          <summary style="cursor: pointer; font-family: var(--sans); user-select: none;">高度な操作 (強制上書き等)</summary>
+          <div class="advanced-ops-body" style="margin-top: 8px; border-top: 1px solid var(--line); padding-top: 8px;">
+            <p class="dialog-desc-warn" style="margin-bottom: 10px; font-size: 11.5px; color: var(--danger);">※強制操作は自動同期による日時の比較を無視し、データを強制的に上書きします。</p>
+            <div class="options-actions" style="display: flex; gap: 8px;">
+              <button type="button" class="btn btn-ghost" id="gistPullBtn" aria-label="Gistからデータを強制的に取得してローカルを上書き" style="flex: 1; font-size: 12px; padding: 6px 10px;">強制読み込み</button>
+              <button type="button" class="btn btn-ghost" id="gistPushBtn" aria-label="現在のローカルデータをGistに強制的に上書き保存" style="flex: 1; font-size: 12px; padding: 6px 10px;">強制保存</button>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   </div>
 </dialog>
+<div id="toast-container" class="toast-container" aria-live="polite"></div>
 </body>
 </html>

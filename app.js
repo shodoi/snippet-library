@@ -4,6 +4,7 @@
   const GIST_SETTINGS_KEY = 'snippets:gist:settings:v1';
   const GIST_TOKEN_KEY = 'snippets:gist:token:v1';
   const THEME_STORAGE_KEY = 'snippets:theme:v1';
+  const LAST_UPDATED_KEY = 'snippets:last_updated:v1';
 
   const CATEGORY_COLOR_PALETTE = [
     '#5fb3a3', // teal(既存 terminal 色)
@@ -128,6 +129,26 @@
     return true;
   }
 
+  // 最終更新日時の読み込み
+  async function loadLastUpdatedAt() {
+    try {
+      const res = await storage.get(LAST_UPDATED_KEY);
+      lastUpdatedAt = (res && res.value) ? res.value : null;
+    } catch (e) {
+      console.warn('Failed to load last updated time:', e);
+    }
+  }
+
+  // 最終更新日時の更新
+  async function updateLastLocalChange() {
+    lastUpdatedAt = new Date().toISOString();
+    try {
+      await storage.set(LAST_UPDATED_KEY, lastUpdatedAt);
+    } catch (e) {
+      console.error('Failed to save last updated time:', e);
+    }
+  }
+
   // カテゴリの読み込み
   async function loadCategories() {
     try {
@@ -198,6 +219,12 @@
     categories.push(newCategory);
     try {
       await persistCategories();
+      const isGistConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+      if (isGistConnected) {
+        await autoPushToGist();
+      } else {
+        showToast('カテゴリを追加しました', 'success');
+      }
     } catch (e) {
       categories.pop(); // ロールバック
       throw e;
@@ -237,6 +264,12 @@
 
     try {
       await persistCategories();
+      const isGistConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+      if (isGistConnected) {
+        await autoPushToGist();
+      } else {
+        showToast('カテゴリを更新しました', 'success');
+      }
     } catch (e) {
       categories[catIndex] = originalCategory; // ロールバック
       throw e;
@@ -267,6 +300,13 @@
       // 双方を永続化
       await persist();
       await persistCategories();
+      
+      const isGistConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+      if (isGistConnected) {
+        await autoPushToGist();
+      } else {
+        showToast('カテゴリを削除しました', 'success');
+      }
     } catch (e) {
       // ロールバック
       snippets = originalSnippets;
@@ -323,6 +363,7 @@
   let searchTerm = '';
   let editingId = null;
   let lastActiveElement = null; // フォーカス復元用
+  let lastUpdatedAt = null;
 
   const listEl = document.getElementById('list');
   const emptyEl = document.getElementById('emptyMsg');
@@ -355,7 +396,13 @@
   const gistDeleteBtn = document.getElementById('gistDeleteBtn');
   const gistPullBtn = document.getElementById('gistPullBtn');
   const gistPushBtn = document.getElementById('gistPushBtn');
+  const gistConnectBtn = document.getElementById('gistConnectBtn');
+  const gistSetupView = document.getElementById('gistSetupView');
+  const gistConnectedView = document.getElementById('gistConnectedView');
+  const connectedGistIdText = document.getElementById('connectedGistIdText');
+  const gistSyncBtn = document.getElementById('gistSyncBtn');
   const tokenStorageRadios = document.getElementsByName('tokenStorage');
+  const toastContainer = document.getElementById('toast-container');
 
   // スクリーンリーダー向け動的通知
   function announce(message) {
@@ -364,6 +411,65 @@
     setTimeout(() => {
       srAnnouncer.textContent = message;
     }, 100);
+  }
+
+  // トースト表示ヘルパー
+  function showToast(message, type = 'success') {
+    if (!toastContainer) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    // アイコンの定義
+    let iconSvg = '';
+    if (type === 'success') {
+      iconSvg = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
+    } else if (type === 'error') {
+      iconSvg = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="15" y1="9" x2="9" y2="15"></line>
+          <line x1="9" y1="9" x2="15" y2="15"></line>
+        </svg>
+      `;
+    } else if (type === 'warning') {
+      iconSvg = `
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      `;
+    }
+
+    toast.innerHTML = `
+      <span class="toast-icon">${iconSvg}</span>
+      <span class="toast-message">${escapeHtml(message)}</span>
+    `;
+
+    toastContainer.appendChild(toast);
+
+    // 4秒後にDOMから自動削除 (フェードアウトアニメーション待ち)
+    setTimeout(() => {
+      if (toast.parentNode === toastContainer) {
+        toastContainer.removeChild(toast);
+      }
+    }, 4000);
+  }
+
+  // HTMLエスケープヘルパー
+  function escapeHtml(str) {
+    if (typeof str !== 'string') return '';
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   // テーマ管理ロジック
@@ -559,6 +665,7 @@
           renderTagFilters();
           render();
           announce('データをリセットし、初期データで上書きしました。');
+          await autoPushToGist();
         } catch (e) {
           alert('初期化データの保存に失敗しました。');
         }
@@ -574,6 +681,11 @@
     lastPulledAt: null
   };
   let gistToken = '';
+
+  // 編集中の未確定データ
+  let tempGistToken = '';
+  let tempGistId = '';
+  let tempTokenStorage = 'session';
 
   async function loadGistSettings() {
     try {
@@ -736,10 +848,13 @@
       throw new Error('GitHub Tokenが設定されていません');
     }
  
+    // ローカルの最終更新日時を更新し、それを使用する
+    await updateLastLocalChange();
+
     const payload = {
       schemaVersion: 2,
       app: 'snippet-library',
-      updatedAt: new Date().toISOString(),
+      updatedAt: lastUpdatedAt,
       categories: categories,
       snippets: snippets
     };
@@ -755,6 +870,45 @@
     gistSettings.lastPushedAt = payload.updatedAt;
     await saveGistSettings();
     return result;
+  }
+
+  async function autoPushToGist() {
+    // まずローカルの変更日時を更新
+    await updateLastLocalChange();
+
+    // Gist連携が未設定なら何もしない
+    if (!gistToken.trim() || !gistSettings.gistId) {
+      return;
+    }
+
+    if (statusEl) {
+      statusEl.textContent = 'Gistに自動保存中…';
+    }
+
+    try {
+      await pushToGist();
+      updateGistUI();
+      showToast('Gistに自動保存しました', 'success');
+      if (statusEl) {
+        statusEl.textContent = 'Gist自動保存完了';
+        setTimeout(() => {
+          if (statusEl.textContent === 'Gist自動保存完了') {
+            statusEl.textContent = '';
+          }
+        }, 3000);
+      }
+    } catch (err) {
+      console.warn('Auto backup to Gist failed:', err);
+      showToast('Gist自動保存に失敗しました（オフラインなど）', 'error');
+      if (statusEl) {
+        statusEl.textContent = 'Gist自動保存失敗（オフラインなど）';
+        setTimeout(() => {
+          if (statusEl.textContent === 'Gist自動保存失敗（オフラインなど）') {
+            statusEl.textContent = '';
+          }
+        }, 3000);
+      }
+    }
   }
  
   async function pullFromGist() {
@@ -774,14 +928,154 @@
     return payload;
   }
 
+  async function autoSyncGistOnLoad() {
+    if (!gistToken.trim() || !gistSettings.gistId) {
+      return; // Gist連携が未設定の場合は何もしない
+    }
+
+    if (statusEl) {
+      statusEl.textContent = 'Gistと同期中…';
+    }
+
+    try {
+      // 1. Gistからデータを取得
+      const payload = await fetchGist(gistToken, gistSettings.gistId);
+      if (!validateGistPayload(payload)) {
+        throw new Error('Gistデータが無効か破損しています');
+      }
+
+      const gistUpdatedAt = payload.updatedAt;
+
+      // 2. 更新日時を比較
+      const localTime = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0;
+      const gistTime = gistUpdatedAt ? new Date(gistUpdatedAt).getTime() : 0;
+
+      // 許容誤差として1秒(1000ms)未満のズレは同一とみなす
+      const diff = Math.abs(localTime - gistTime);
+
+      if (gistTime > localTime && diff > 1000) {
+        // Gistの方が新しい場合：自動で取り込み
+        let importSnippets = payload.snippets;
+        let importCategories = payload.categories || [];
+        const needsMigration = payload.schemaVersion === 1;
+
+        if (needsMigration) {
+          const terminalId = generateUUID();
+          const aiId = generateUUID();
+          importCategories = [
+            { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true },
+            { id: terminalId, label: 'Terminal', color: '#5fb3a3', protected: false },
+            { id: aiId, label: 'AI Agent', color: '#d9a441', protected: false }
+          ];
+          importSnippets = importSnippets.map(s => {
+            let newTag = 'uncategorized';
+            if (s.tag === 'terminal') newTag = terminalId;
+            else if (s.tag === 'ai') newTag = aiId;
+            return { ...s, tag: newTag };
+          });
+        } else {
+          const catIds = new Set(importCategories.map(c => c.id));
+          importSnippets = importSnippets.map(s => {
+            if (!catIds.has(s.tag)) {
+              return { ...s, tag: 'uncategorized' };
+            }
+            return s;
+          });
+        }
+
+        snippets = importSnippets;
+        categories = importCategories;
+
+        await persist();
+        await persistCategories();
+
+        gistSettings.lastPulledAt = gistUpdatedAt;
+        await saveGistSettings();
+
+        // ローカルの更新時間も合わせる
+        lastUpdatedAt = gistUpdatedAt;
+        try {
+          await storage.set(LAST_UPDATED_KEY, lastUpdatedAt);
+        } catch (e) {}
+
+        if (activeTag !== 'all' && !categories.some(c => c.id === activeTag)) {
+          activeTag = 'all';
+        }
+        renderCategorySelect();
+        renderTagFilters();
+        render();
+        updateGistUI();
+        showToast('Gistから自動同期しました', 'success');
+
+        if (statusEl) {
+          statusEl.textContent = 'Gistから自動同期しました';
+          setTimeout(() => {
+            if (statusEl.textContent === 'Gistから自動同期しました') {
+              statusEl.textContent = '';
+            }
+          }, 3000);
+        }
+      } else if (localTime > gistTime && diff > 1000) {
+        // ローカルの方が新しい場合：自動でGistにプッシュ
+        const pushPayload = {
+          schemaVersion: 2,
+          app: 'snippet-library',
+          updatedAt: lastUpdatedAt || new Date().toISOString(),
+          categories: categories,
+          snippets: snippets
+        };
+        const result = await updateGist(gistToken, gistSettings.gistId, pushPayload);
+        gistSettings.lastPushedAt = pushPayload.updatedAt;
+        await saveGistSettings();
+        updateGistUI();
+        showToast('Gistに自動保存しました', 'success');
+
+        if (statusEl) {
+          statusEl.textContent = 'Gistに自動同期保存しました';
+          setTimeout(() => {
+            if (statusEl.textContent === 'Gistに自動同期保存しました') {
+              statusEl.textContent = '';
+            }
+          }, 3000);
+        }
+      } else {
+        // 時刻がほぼ同じ（または同一）なら同期不要
+        if (statusEl) {
+          statusEl.textContent = 'Gist同期済み';
+          setTimeout(() => {
+            if (statusEl.textContent === 'Gist同期済み') {
+              statusEl.textContent = '';
+            }
+          }, 2000);
+        }
+      }
+    } catch (err) {
+      console.warn('Auto sync on load failed:', err);
+      showToast('Gist自動同期に失敗しました（オフラインなど）', 'error');
+      if (statusEl) {
+        statusEl.textContent = 'Gist同期失敗（オフラインなど）';
+        setTimeout(() => {
+          if (statusEl.textContent === 'Gist同期失敗（オフラインなど）') {
+            statusEl.textContent = '';
+          }
+        }, 3000);
+      }
+    }
+  }
+
   function updateGistUI() {
     if (!gistTokenEl) return;
     
-    gistTokenEl.value = gistToken;
-    gistIdEl.value = gistSettings.gistId;
+    // UIを開いた時点の決定値で一時変数を初期化
+    tempGistToken = gistToken;
+    tempGistId = gistSettings.gistId;
+    tempTokenStorage = gistSettings.tokenStorage;
+
+    gistTokenEl.value = tempGistToken;
+    gistIdEl.value = tempGistId;
 
     for (const radio of tokenStorageRadios) {
-      radio.checked = (radio.value === gistSettings.tokenStorage);
+      radio.checked = (radio.value === tempTokenStorage);
     }
 
     const formatDate = (isoString) => {
@@ -796,6 +1090,37 @@
 
     lastPushedAtText.textContent = formatDate(gistSettings.lastPushedAt);
     lastPulledAtText.textContent = formatDate(gistSettings.lastPulledAt);
+
+    // 接続状態に応じてビューの表示/非表示を切り替える
+    const isConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+    if (isConnected) {
+      if (gistSetupView) gistSetupView.style.display = 'none';
+      if (gistConnectedView) gistConnectedView.style.display = 'block';
+      if (connectedGistIdText) connectedGistIdText.textContent = gistSettings.gistId;
+    } else {
+      if (gistSetupView) gistSetupView.style.display = 'block';
+      if (gistConnectedView) gistConnectedView.style.display = 'none';
+    }
+
+    updateGistControlsState();
+  }
+
+  function updateGistControlsState() {
+    const isConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+    const hasTokenInput = !!tempGistToken.trim();
+
+    if (gistPullBtn) {
+      gistPullBtn.disabled = !isConnected;
+    }
+    if (gistPushBtn) {
+      gistPushBtn.disabled = !isConnected;
+    }
+    if (gistDeleteBtn) {
+      gistDeleteBtn.disabled = !gistToken.trim();
+    }
+    if (gistConnectBtn) {
+      gistConnectBtn.disabled = !hasTokenInput;
+    }
   }
 
   function registerGistListeners() {
@@ -826,21 +1151,160 @@
     }
 
     gistTokenEl.addEventListener('input', (e) => {
-      gistToken = e.target.value.trim();
-      saveGistToken();
+      tempGistToken = e.target.value.trim();
+      updateGistControlsState();
     });
 
     gistIdEl.addEventListener('input', (e) => {
-      gistSettings.gistId = e.target.value.trim();
-      saveGistSettings();
+      tempGistId = e.target.value.trim();
     });
 
     for (const radio of tokenStorageRadios) {
       radio.addEventListener('change', (e) => {
         if (e.target.checked) {
-          gistSettings.tokenStorage = e.target.value;
-          saveGistSettings();
+          tempTokenStorage = e.target.value;
+        }
+      });
+    }
+
+    if (gistConnectBtn) {
+      gistConnectBtn.addEventListener('click', async () => {
+        if (!tempGistToken.trim()) {
+          alert('GitHub Token を入力してください。');
+          gistTokenEl.focus();
+          return;
+        }
+
+        const originalBtnText = gistConnectBtn.textContent;
+        gistConnectBtn.textContent = '接続検証中…';
+        gistConnectBtn.disabled = true;
+        setSyncState(true);
+
+        try {
+          let testGistId = tempGistId.trim();
+          let payload = null;
+
+          if (testGistId) {
+            announce('Gistの接続検証中…');
+            payload = await fetchGist(tempGistToken, testGistId);
+            if (!validateGistPayload(payload)) {
+              throw new Error('Gistデータが無効か破損しています');
+            }
+          } else {
+            announce('新規Gist作成テスト中…');
+            const initialPayload = {
+              schemaVersion: 2,
+              app: 'snippet-library',
+              updatedAt: new Date().toISOString(),
+              categories: categories,
+              snippets: snippets
+            };
+            const result = await createGist(tempGistToken, initialPayload);
+            testGistId = result.id;
+            payload = initialPayload;
+          }
+
+          // 接続成功したら設定を確定・保存
+          gistToken = tempGistToken;
+          gistSettings.gistId = testGistId;
+          gistSettings.tokenStorage = tempTokenStorage;
+          
+          if (payload && payload.updatedAt) {
+            gistSettings.lastPushedAt = payload.updatedAt;
+            gistSettings.lastPulledAt = payload.updatedAt;
+          }
+
           saveGistToken();
+          await saveGistSettings();
+
+          // その場で自動同期処理を実行
+          announce('接続成功。データを同期しています…');
+          
+          const gistUpdatedAt = payload.updatedAt;
+          const localTime = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0;
+          const gistTime = gistUpdatedAt ? new Date(gistUpdatedAt).getTime() : 0;
+          const diff = Math.abs(localTime - gistTime);
+
+          if (gistTime > localTime && diff > 1000) {
+            let importSnippets = payload.snippets;
+            let importCategories = payload.categories || [];
+            const needsMigration = payload.schemaVersion === 1;
+
+            if (needsMigration) {
+              const terminalId = generateUUID();
+              const aiId = generateUUID();
+              importCategories = [
+                { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true },
+                { id: terminalId, label: 'Terminal', color: '#5fb3a3', protected: false },
+                { id: aiId, label: 'AI Agent', color: '#d9a441', protected: false }
+              ];
+              importSnippets = importSnippets.map(s => {
+                let newTag = 'uncategorized';
+                if (s.tag === 'terminal') newTag = terminalId;
+                else if (s.tag === 'ai') newTag = aiId;
+                return { ...s, tag: newTag };
+              });
+            } else {
+              const catIds = new Set(importCategories.map(c => c.id));
+              importSnippets = importSnippets.map(s => {
+                if (!catIds.has(s.tag)) {
+                  return { ...s, tag: 'uncategorized' };
+                }
+                return s;
+              });
+            }
+
+            snippets = importSnippets;
+            categories = importCategories;
+
+            await persist();
+            await persistCategories();
+
+            lastUpdatedAt = gistUpdatedAt;
+            try {
+              await storage.set(LAST_UPDATED_KEY, lastUpdatedAt);
+            } catch (e) {}
+
+            if (activeTag !== 'all' && !categories.some(c => c.id === activeTag)) {
+              activeTag = 'all';
+            }
+            renderCategorySelect();
+            renderTagFilters();
+            render();
+          } else if (localTime > gistTime && diff > 1000) {
+            const pushPayload = {
+              schemaVersion: 2,
+              app: 'snippet-library',
+              updatedAt: lastUpdatedAt || new Date().toISOString(),
+              categories: categories,
+              snippets: snippets
+            };
+            await updateGist(gistToken, gistSettings.gistId, pushPayload);
+            gistSettings.lastPushedAt = pushPayload.updatedAt;
+            await saveGistSettings();
+          }
+
+          updateGistUI();
+          announce('Gistの接続と同期が完了しました。');
+          showToast('Gistの接続と同期が完了しました。', 'success');
+          alert('Gistの接続と同期が完了しました。');
+        } catch (err) {
+          console.error('Gist connection or sync failed:', err);
+          let friendlyMsg = '接続または同期に失敗しました。\n';
+          if (err.status === 401 || err.status === 403) {
+            friendlyMsg += 'GitHub Token の権限または有効期限を確認してください。';
+          } else if (err.status === 404) {
+            friendlyMsg += 'Gist ID が存在しないか、Tokenの権限が不足しています。';
+          } else {
+            friendlyMsg += err.message;
+          }
+          showToast(friendlyMsg, 'error');
+          announce(friendlyMsg);
+          alert(friendlyMsg);
+        } finally {
+          gistConnectBtn.textContent = originalBtnText;
+          setSyncState(false);
+          updateGistControlsState();
         }
       });
     }
@@ -849,6 +1313,7 @@
       if (confirm('GitHub Token および Gist ID などの連携設定を削除します。よろしいですか？')) {
         await deleteGistSettings();
         updateGistUI();
+        showToast('Gist連携設定を削除しました。', 'success');
         announce('Gist連携設定を削除しました。');
       }
     });
@@ -856,15 +1321,130 @@
     let isSyncing = false;
     function setSyncState(syncing) {
       isSyncing = syncing;
-      gistPullBtn.disabled = syncing;
-      gistPushBtn.disabled = syncing;
-      gistDeleteBtn.disabled = syncing;
-      gistTokenEl.disabled = syncing;
-      gistIdEl.disabled = syncing;
+      if (gistPullBtn) gistPullBtn.disabled = syncing;
+      if (gistPushBtn) gistPushBtn.disabled = syncing;
+      if (gistDeleteBtn) gistDeleteBtn.disabled = syncing;
+      if (gistConnectBtn) gistConnectBtn.disabled = syncing;
+      if (gistSyncBtn) gistSyncBtn.disabled = syncing;
+      if (gistTokenEl) gistTokenEl.disabled = syncing;
+      if (gistIdEl) gistIdEl.disabled = syncing;
       for (const radio of tokenStorageRadios) {
         radio.disabled = syncing;
       }
+      if (!syncing) {
+        updateGistControlsState();
+      }
     }
+
+    gistSyncBtn.addEventListener('click', async () => {
+      if (isSyncing) return;
+      if (!gistToken.trim() || !gistSettings.gistId) {
+        return;
+      }
+
+      setSyncState(true);
+      announce('Gistとの手動同期を開始します…');
+
+      try {
+        // 1. Gistからデータを取得
+        const payload = await fetchGist(gistToken, gistSettings.gistId);
+        if (!validateGistPayload(payload)) {
+          throw new Error('Gistデータが無効か破損しています');
+        }
+
+        const gistUpdatedAt = payload.updatedAt;
+
+        // 2. 更新日時を比較
+        const localTime = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0;
+        const gistTime = gistUpdatedAt ? new Date(gistUpdatedAt).getTime() : 0;
+
+        // 許容誤差として1秒(1000ms)未満のズレは同一とみなす
+        const diff = Math.abs(localTime - gistTime);
+
+        if (gistTime > localTime && diff > 1000) {
+          // Gistの方が新しい場合：自動で取り込み
+          let importSnippets = payload.snippets;
+          let importCategories = payload.categories || [];
+          const needsMigration = payload.schemaVersion === 1;
+
+          if (needsMigration) {
+            const terminalId = generateUUID();
+            const aiId = generateUUID();
+            importCategories = [
+              { id: 'uncategorized', label: '未分類', color: UNCATEGORIZED_COLOR, protected: true },
+              { id: terminalId, label: 'Terminal', color: '#5fb3a3', protected: false },
+              { id: aiId, label: 'AI Agent', color: '#d9a441', protected: false }
+            ];
+            importSnippets = importSnippets.map(s => {
+              let newTag = 'uncategorized';
+              if (s.tag === 'terminal') newTag = terminalId;
+              else if (s.tag === 'ai') newTag = aiId;
+              return { ...s, tag: newTag };
+            });
+          } else {
+            const catIds = new Set(importCategories.map(c => c.id));
+            importSnippets = importSnippets.map(s => {
+              if (!catIds.has(s.tag)) {
+                return { ...s, tag: 'uncategorized' };
+              }
+              return s;
+            });
+          }
+
+          snippets = importSnippets;
+          categories = importCategories;
+
+          await persist();
+          await persistCategories();
+
+          gistSettings.lastPulledAt = gistUpdatedAt;
+          await saveGistSettings();
+
+          // ローカルの更新時間も合わせる
+          lastUpdatedAt = gistUpdatedAt;
+          try {
+            await storage.set(LAST_UPDATED_KEY, lastUpdatedAt);
+          } catch (e) {}
+
+          if (activeTag !== 'all' && !categories.some(c => c.id === activeTag)) {
+            activeTag = 'all';
+          }
+          renderCategorySelect();
+          renderTagFilters();
+          render();
+          updateGistUI();
+
+          showToast('Gistの最新データを反映しました。', 'success');
+          announce('Gistの最新データを反映しました。');
+        } else if (localTime > gistTime && diff > 1000) {
+          // ローカルの方が新しい場合：自動でGistにプッシュ
+          const pushPayload = {
+            schemaVersion: 2,
+            app: 'snippet-library',
+            updatedAt: lastUpdatedAt || new Date().toISOString(),
+            categories: categories,
+            snippets: snippets
+          };
+          const result = await updateGist(gistToken, gistSettings.gistId, pushPayload);
+          gistSettings.lastPushedAt = pushPayload.updatedAt;
+          await saveGistSettings();
+          updateGistUI();
+
+          showToast('ローカルの最新データをGistへ保存しました。', 'success');
+          announce('ローカルの最新データをGistへ保存しました。');
+        } else {
+          // 時刻がほぼ同じ（または同一）なら同期不要
+          showToast('すでに最新の状態です。', 'success');
+          announce('同期は不要です。すでに最新の状態です。');
+        }
+      } catch (err) {
+        console.warn('Manual sync failed:', err);
+        showToast('同期に失敗しました（オフラインや権限不足）', 'error');
+        announce('同期に失敗しました。');
+      } finally {
+        setSyncState(false);
+      }
+    });
 
     gistPushBtn.addEventListener('click', async () => {
       if (isSyncing) return;
@@ -875,11 +1455,50 @@
       }
 
       setSyncState(true);
+
+      // 上書き警告のチェック
+      try {
+        if (gistSettings.gistId) {
+          announce('Gist上の最新データを確認中…');
+          const payload = await fetchGist(gistToken, gistSettings.gistId);
+          if (payload && validateGistPayload(payload)) {
+            const gistUpdatedAt = payload.updatedAt;
+            const gistSnippets = payload.snippets || [];
+
+            const localTime = lastUpdatedAt ? new Date(lastUpdatedAt).getTime() : 0;
+            const gistTime = gistUpdatedAt ? new Date(gistUpdatedAt).getTime() : 0;
+
+            const isGistNewer = (gistTime > localTime && Math.abs(localTime - gistTime) > 1000);
+            const isLocalSignificantlySmaller = (snippets.length <= 2 && gistSnippets.length > snippets.length);
+
+            if (isGistNewer || isLocalSignificantlySmaller) {
+              const confirmMsg = isLocalSignificantlySmaller
+                ? `【警告】Gist上のスニペット数（${gistSnippets.length}件）に比べ、ローカルのスニペット数（${snippets.length}件）が極端に少ないです。\nこのまま保存すると、Gistに保存されている既存データが上書きされ、失われてしまいます。\n\n本当にGistへ上書き保存しますか？`
+                : `【警告】Gist上のデータの方が新しいです（Gist側更新: ${new Date(gistUpdatedAt).toLocaleString('ja-JP')}）。\nこのまま保存すると、Gistの最新の変更内容がローカルのデータで上書きされ、失われます。\n\n本当にGistへ上書き保存しますか？`;
+
+              if (!confirm(confirmMsg)) {
+                announce('保存をキャンセルしました。');
+                setSyncState(false);
+                return;
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to verify Gist state for overwrite check:', e);
+        if (!confirm('Gist上の最新データの確認に失敗しました（オフラインや権限不足の可能性があります）。\nこのままGistに上書き保存しますか？')) {
+          announce('保存をキャンセルしました。');
+          setSyncState(false);
+          return;
+        }
+      }
+
       announce('Gistへの保存を開始します…');
       try {
         await pushToGist();
         updateGistUI();
         announce('Gistへの保存が完了しました。');
+        showToast('Gistへの保存が完了しました。', 'success');
         alert('Gistへの保存が完了しました。');
       } catch (err) {
         console.error('Gist push failed:', err);
@@ -891,6 +1510,7 @@
         } else {
           friendlyMsg += err.message;
         }
+        showToast(friendlyMsg, 'error');
         announce(friendlyMsg);
         alert(friendlyMsg);
       } finally {
@@ -962,6 +1582,12 @@
             gistSettings.lastPulledAt = payload.updatedAt || new Date().toISOString();
             await saveGistSettings();
             
+            // ローカルの最終更新時間も合わせる
+            lastUpdatedAt = gistSettings.lastPulledAt;
+            try {
+              await storage.set(LAST_UPDATED_KEY, lastUpdatedAt);
+            } catch (e) {}
+            
             if (activeTag !== 'all' && !categories.some(c => c.id === activeTag)) {
               activeTag = 'all';
             }
@@ -973,10 +1599,12 @@
             }
             updateGistUI();
             announce('Gistからの読み込みとローカルへの反映が完了しました。');
+            showToast('Gistからスニペットを同期しました。', 'success');
             alert('Gistからの読み込みが完了しました。');
           } catch (e) {
             snippets = originalSnippets;
             categories = originalCategories;
+            showToast('同期に失敗しました（ローカル保存エラー）', 'error');
             announce('ローカルデータの保存に失敗したため、読み込みをキャンセルしました。');
             alert('インポートに失敗しました。ローカルストレージへの書き込みエラーです。');
           }
@@ -991,6 +1619,7 @@
         } else {
           friendlyMsg += err.message;
         }
+        showToast(friendlyMsg, 'error');
         announce(friendlyMsg);
         alert(friendlyMsg);
       } finally {
@@ -1008,6 +1637,7 @@
       applyTheme(savedTheme);
 
       await loadGistSettings();
+      await loadLastUpdatedAt();
 
       // カテゴリのロード
       const catRes = await storage.get(CATEGORIES_STORAGE_KEY);
@@ -1050,6 +1680,7 @@
         renderCategorySelect();
         renderTagFilters();
         render();
+        autoSyncGistOnLoad();
         return;
       }
 
@@ -1078,6 +1709,7 @@
         renderCategorySelect();
         renderTagFilters();
         render();
+        autoSyncGistOnLoad();
       } else {
         showCorruptedDataError(res.value);
       }
@@ -1466,11 +2098,19 @@
           render();
           announce(`${s.title}を削除しました。`);
           searchEl.focus();
+          
+          const isGistConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+          if (isGistConnected) {
+            await autoPushToGist();
+          } else {
+            showToast('スニペットを削除しました', 'success');
+          }
         } catch(e) {
           snippets = originalSnippets;
           statusEl.textContent = '削除に失敗しました';
           setTimeout(()=>{ statusEl.textContent = ''; }, 3000);
           announce('削除に失敗しました。');
+          showToast('削除に失敗しました', 'error');
           deleteBtn.textContent = '削除';
           deleteBtn.classList.remove('confirming');
         }
@@ -1563,11 +2203,19 @@
       closeForm();
       render();
       announce(isEdit ? `スニペット「${title}」を更新しました。` : `スニペット「${title}」を追加しました。`);
+      
+      const isGistConnected = !!(gistToken.trim() && gistSettings.gistId.trim());
+      if (isGistConnected) {
+        await autoPushToGist();
+      } else {
+        showToast('スニペットを保存しました', 'success');
+      }
     } catch(e) {
       snippets = originalSnippets;
       statusEl.textContent = '保存に失敗しました';
       setTimeout(()=>{ statusEl.textContent = ''; }, 3000);
       announce('保存に失敗しました。');
+      showToast('保存に失敗しました', 'error');
     }
   });
 
@@ -1712,6 +2360,7 @@
           announce(`スニペットデータをインポートしました。計 ${snippets.length} 件を取り込みました。`);
           statusEl.textContent = 'インポート完了';
           setTimeout(() => { statusEl.textContent = ''; }, 2000);
+          await autoPushToGist();
         } catch (e) {
           snippets = originalSnippets;
           categories = originalCategories;

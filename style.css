@@ -1123,3 +1123,120 @@ html[data-theme="light"] .theme-menu-item.active {
     width: 38px;
   }
 }
+
+/* トースト通知 */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 380px;
+  width: calc(100% - 48px);
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--teal);
+  border-radius: 8px;
+  padding: 14px 16px;
+  color: var(--text);
+  font-size: 13.5px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  opacity: 0;
+  animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards, toastFadeOut 0.3s cubic-bezier(0.16, 1, 0.3, 1) 3.7s forwards;
+}
+
+@supports (backdrop-filter: blur(8px)) {
+  .toast {
+    background: rgba(33, 36, 41, 0.85);
+    backdrop-filter: blur(8px);
+  }
+  html[data-theme="light"] .toast {
+    background: rgba(255, 255, 255, 0.85);
+  }
+}
+
+.toast.error {
+  border-left-color: var(--danger);
+}
+
+.toast.warning {
+  border-left-color: var(--amber);
+}
+
+.toast-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-message {
+  flex-grow: 1;
+  font-family: var(--sans);
+  line-height: 1.4;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+}
+
+/* 高度な操作（アコーディオン） */
+.gist-advanced-ops {
+  margin-top: 16px;
+  background: var(--panel-2);
+  transition: background-color 0.15s ease;
+}
+
+.gist-advanced-ops[open] {
+  background: var(--panel);
+}
+
+.gist-advanced-ops summary::-webkit-details-marker {
+  display: none;
+}
+
+.gist-advanced-ops summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  outline: none;
+  font-weight: 600;
+}
+
+.gist-advanced-ops summary::after {
+  content: "＋";
+  font-size: 11px;
+  transition: transform 0.15s ease;
+}
+
+.gist-advanced-ops[open] summary::after {
+  content: "－";
+}
