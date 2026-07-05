@@ -1,0 +1,25 @@
+{
+  "name": "snippet-library",
+  "version": "1.0.0",
+  "description": "よく使うターミナルコマンドや、AIエージェント向け指示（プロンプト）をまとめて管理・コピーできる、シンプルでモダンなシングルページアプリケーション (SPA) です。",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/shodoi/snippet-library.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/shodoi/snippet-library/issues"
+  },
+  "homepage": "https://github.com/shodoi/snippet-library#readme",
+  "devDependencies": {
+    "eslint": "^9.39.4",
+    "knip": "^6.24.0"
+  }
+}

@@ -565,7 +565,7 @@
     // 項目選択
     if (themeMenuItems) {
       themeMenuItems.forEach(item => {
-        item.addEventListener('click', async (e) => {
+        item.addEventListener('click', async () => {
           const val = item.getAttribute('data-theme-val');
           applyTheme(val);
           await storage.set(THEME_STORAGE_KEY, val);
@@ -1024,7 +1024,7 @@
           categories: categories,
           snippets: snippets
         };
-        const result = await updateGist(gistToken, gistSettings.gistId, pushPayload);
+        await updateGist(gistToken, gistSettings.gistId, pushPayload);
         gistSettings.lastPushedAt = pushPayload.updatedAt;
         await saveGistSettings();
         updateGistUI();
@@ -1425,7 +1425,7 @@
             categories: categories,
             snippets: snippets
           };
-          const result = await updateGist(gistToken, gistSettings.gistId, pushPayload);
+          await updateGist(gistToken, gistSettings.gistId, pushPayload);
           gistSettings.lastPushedAt = pushPayload.updatedAt;
           await saveGistSettings();
           updateGistUI();
@@ -1918,7 +1918,6 @@
     const addColorsContainer = document.getElementById('catAddColors');
     if (addColorsContainer) {
       addColorsContainer.innerHTML = '';
-      let selectedColor = CATEGORY_COLOR_PALETTE[0];
       CATEGORY_COLOR_PALETTE.forEach((color, idx) => {
         const radio = document.createElement('label');
         radio.className = 'color-radio' + (idx === 0 ? ' selected' : '');
@@ -1926,7 +1925,6 @@
         radio.innerHTML = `<input type="radio" name="addColor" value="${color}" ${idx === 0 ? 'checked' : ''}>`;
         radio.addEventListener('change', (e) => {
           if (e.target.checked) {
-            selectedColor = color;
             addColorsContainer.querySelectorAll('.color-radio').forEach(r => r.classList.remove('selected'));
             radio.classList.add('selected');
           }
