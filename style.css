@@ -385,15 +385,94 @@ h1 {
   user-select: none;
 }
 
-pre.code {
+pre.code-pre {
   flex: 1;
   margin: 0;
+  overflow: hidden;
+}
+
+pre.code-pre code.code {
+  display: block;
   font-family: var(--mono);
   font-size: 14px;
   color: var(--code-text);
   white-space: pre-wrap;
   word-break: break-word;
+  padding: 0;
+  background: transparent;
 }
+
+/* highlight.js シンタックスハイライト — ダークテーマ */
+html[data-theme="dark"] .hljs {
+  background: transparent;
+  color: var(--code-text);
+}
+html[data-theme="dark"] .hljs-keyword,
+html[data-theme="dark"] .hljs-selector-tag,
+html[data-theme="dark"] .hljs-built_in,
+html[data-theme="dark"] .hljs-type { color: #c792ea; }
+html[data-theme="dark"] .hljs-string,
+html[data-theme="dark"] .hljs-meta .hljs-string { color: #c3e88d; }
+html[data-theme="dark"] .hljs-number,
+html[data-theme="dark"] .hljs-literal { color: #f78c6c; }
+html[data-theme="dark"] .hljs-comment,
+html[data-theme="dark"] .hljs-quote { color: #697098; font-style: italic; }
+html[data-theme="dark"] .hljs-variable,
+html[data-theme="dark"] .hljs-template-variable { color: #f07178; }
+html[data-theme="dark"] .hljs-title,
+html[data-theme="dark"] .hljs-title\.function_,
+html[data-theme="dark"] .hljs-section { color: #82aaff; }
+html[data-theme="dark"] .hljs-attr,
+html[data-theme="dark"] .hljs-attribute { color: #ffcb6b; }
+html[data-theme="dark"] .hljs-params { color: var(--code-text); }
+html[data-theme="dark"] .hljs-regexp { color: #89ddff; }
+html[data-theme="dark"] .hljs-symbol,
+html[data-theme="dark"] .hljs-bullet { color: #89ddff; }
+html[data-theme="dark"] .hljs-meta { color: #89ddff; }
+html[data-theme="dark"] .hljs-deletion { color: #ff5370; background: rgba(255, 83, 112, 0.1); }
+html[data-theme="dark"] .hljs-addition { color: #c3e88d; background: rgba(195, 232, 141, 0.1); }
+html[data-theme="dark"] .hljs-subst { color: var(--code-text); }
+html[data-theme="dark"] .hljs-operator { color: #89ddff; }
+html[data-theme="dark"] .hljs-property { color: #f07178; }
+html[data-theme="dark"] .hljs-punctuation { color: #89ddff; }
+html[data-theme="dark"] .hljs-tag { color: #f07178; }
+html[data-theme="dark"] .hljs-name { color: #f07178; }
+
+/* highlight.js シンタックスハイライト — ライトテーマ */
+html[data-theme="light"] .hljs {
+  background: transparent;
+  color: var(--code-text);
+}
+html[data-theme="light"] .hljs-keyword,
+html[data-theme="light"] .hljs-selector-tag,
+html[data-theme="light"] .hljs-built_in,
+html[data-theme="light"] .hljs-type { color: #7c3aed; }
+html[data-theme="light"] .hljs-string,
+html[data-theme="light"] .hljs-meta .hljs-string { color: #16a34a; }
+html[data-theme="light"] .hljs-number,
+html[data-theme="light"] .hljs-literal { color: #ea580c; }
+html[data-theme="light"] .hljs-comment,
+html[data-theme="light"] .hljs-quote { color: #94a3b8; font-style: italic; }
+html[data-theme="light"] .hljs-variable,
+html[data-theme="light"] .hljs-template-variable { color: #dc2626; }
+html[data-theme="light"] .hljs-title,
+html[data-theme="light"] .hljs-title\.function_,
+html[data-theme="light"] .hljs-section { color: #2563eb; }
+html[data-theme="light"] .hljs-attr,
+html[data-theme="light"] .hljs-attribute { color: #d97706; }
+html[data-theme="light"] .hljs-params { color: var(--code-text); }
+html[data-theme="light"] .hljs-regexp { color: #0891b2; }
+html[data-theme="light"] .hljs-symbol,
+html[data-theme="light"] .hljs-bullet { color: #0891b2; }
+html[data-theme="light"] .hljs-meta { color: #0891b2; }
+html[data-theme="light"] .hljs-deletion { color: #dc2626; background: rgba(220, 38, 38, 0.08); }
+html[data-theme="light"] .hljs-addition { color: #16a34a; background: rgba(22, 163, 74, 0.08); }
+html[data-theme="light"] .hljs-subst { color: var(--code-text); }
+html[data-theme="light"] .hljs-operator { color: #0891b2; }
+html[data-theme="light"] .hljs-property { color: #dc2626; }
+html[data-theme="light"] .hljs-punctuation { color: #475569; }
+html[data-theme="light"] .hljs-tag { color: #dc2626; }
+html[data-theme="light"] .hljs-name { color: #dc2626; }
 
 .copy-btn {
   flex-shrink: 0;

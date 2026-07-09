@@ -2038,7 +2038,7 @@
         </div>
         <div class="code-row">
           <span class="prompt-mark" aria-hidden="true">${promptMark}</span>
-          <pre class="code"></pre>
+          <pre class="code-pre"><code class="code"></code></pre>
           <button type="button" class="copy-btn"></button>
         </div>
         <div class="card-footer">
@@ -2049,7 +2049,12 @@
       card.querySelector('.card-title').textContent = s.title;
       card.querySelector('.card-desc').textContent = s.desc;
       card.querySelector('.card-tag').textContent = category.label;
-      card.querySelector('.code').textContent = s.code;
+      const codeEl = card.querySelector('.code');
+      codeEl.textContent = s.code;
+      // highlight.js が利用可能ならシンタックスハイライトを適用
+      if (typeof hljs !== 'undefined') {
+        hljs.highlightElement(codeEl);
+      }
 
       const copyBtn = card.querySelector('.copy-btn');
       copyBtn.textContent = 'コピー';
@@ -2412,6 +2417,14 @@
 
   registerGistListeners();
   initThemeEvents();
+
+  // highlight.js の初期設定 (CDN読み込みが完了している場合)
+  if (typeof hljs !== 'undefined') {
+    hljs.configure({
+      cssSelector: '',           // DOMContentLoaded での自動走査を無効化
+      ignoreUnescapedHTML: true   // textContent で安全に設定するため警告を抑制
+    });
+  }
 
   load();
 })();
