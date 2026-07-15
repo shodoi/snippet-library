@@ -365,9 +365,13 @@
   let lastActiveElement = null; // フォーカス復元用
   let lastUpdatedAt = null;
 
+  let currentPage = 1;
+  const ITEMS_PER_PAGE = 20;
+
   const listEl = document.getElementById('list');
   const emptyEl = document.getElementById('emptyMsg');
   const tagFiltersEl = document.getElementById('tagFilters');
+  const paginationEl = document.getElementById('pagination');
   const statusEl = document.getElementById('status');
   const searchEl = document.getElementById('search');
   const addToggle = document.getElementById('addToggle');
@@ -1997,6 +2001,7 @@
       btn.setAttribute('aria-pressed', activeTag===t ? 'true' : 'false');
       btn.addEventListener('click', ()=>{
         activeTag = t;
+        currentPage = 1;
         renderTagFilters();
         render();
         announce(`${btn.textContent}のタグでフィルターしました。`);
@@ -2008,7 +2013,13 @@
   function matches(s){
     const inTag = activeTag==='all' || s.tag===activeTag;
     const q = searchTerm.trim().toLowerCase();
-    const inSearch = !q || s.title.toLowerCase().includes(q) || s.desc.toLowerCase().includes(q) || s.code.toLowerCase().includes(q);
+    if (!q) return inTag;
+    const keywords = q.split(/[\s　]+/).filter(Boolean);
+    const inSearch = keywords.every(kw => 
+      s.title.toLowerCase().includes(kw) || 
+      s.desc.toLowerCase().includes(kw) || 
+      s.code.toLowerCase().includes(kw)
+    );
     return inTag && inSearch;
   }
 
@@ -2017,7 +2028,16 @@
     listEl.innerHTML = '';
     emptyEl.style.display = filtered.length ? 'none' : 'block';
 
-    filtered.forEach(s=>{
+    const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE) || 1;
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    const endIndex = startIndex + ITEMS_PER_PAGE;
+    const pageItems = filtered.slice(startIndex, endIndex);
+
+    pageItems.forEach(s=>{
       const card = document.createElement('div');
       card.className = 'card';
 
@@ -2128,10 +2148,114 @@
 
       listEl.appendChild(card);
     });
+
+    renderPagination(totalPages);
+  }
+
+  function renderPagination(totalPages) {
+    paginationEl.innerHTML = '';
+    if (totalPages <= 1) {
+      paginationEl.style.display = 'none';
+      return;
+    }
+    paginationEl.style.display = 'flex';
+
+    // 「前へ」ボタン
+    const prevBtn = document.createElement('button');
+    prevBtn.className = 'page-btn';
+    prevBtn.innerHTML = '&laquo;';
+    prevBtn.setAttribute('aria-label', '前のページへ');
+    prevBtn.disabled = currentPage === 1;
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        render();
+        listEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+    paginationEl.appendChild(prevBtn);
+
+    // ページ番号ボタン（スライディングウィンドウ: 前後2ページ）
+    const startPage = Math.max(1, currentPage - 2);
+    const endPage = Math.min(totalPages, currentPage + 2);
+
+    if (startPage > 1) {
+      const firstBtn = document.createElement('button');
+      firstBtn.className = 'page-btn';
+      firstBtn.textContent = '1';
+      firstBtn.addEventListener('click', () => {
+        currentPage = 1;
+        render();
+        listEl.scrollIntoView({ behavior: 'smooth' });
+      });
+      paginationEl.appendChild(firstBtn);
+
+      if (startPage > 2) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'page-ellipsis';
+        ellipsis.textContent = '...';
+        ellipsis.style.color = 'var(--muted)';
+        ellipsis.style.padding = '0 4px';
+        paginationEl.appendChild(ellipsis);
+      }
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      const pageBtn = document.createElement('button');
+      pageBtn.className = 'page-btn' + (currentPage === i ? ' active' : '');
+      pageBtn.textContent = i.toString();
+      pageBtn.setAttribute('aria-label', `${i}ページ目へ`);
+      if (currentPage === i) {
+        pageBtn.setAttribute('aria-current', 'page');
+      }
+      pageBtn.addEventListener('click', () => {
+        currentPage = i;
+        render();
+        listEl.scrollIntoView({ behavior: 'smooth' });
+      });
+      paginationEl.appendChild(pageBtn);
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        const ellipsis = document.createElement('span');
+        ellipsis.className = 'page-ellipsis';
+        ellipsis.textContent = '...';
+        ellipsis.style.color = 'var(--muted)';
+        ellipsis.style.padding = '0 4px';
+        paginationEl.appendChild(ellipsis);
+      }
+
+      const lastBtn = document.createElement('button');
+      lastBtn.className = 'page-btn';
+      lastBtn.textContent = totalPages.toString();
+      lastBtn.addEventListener('click', () => {
+        currentPage = totalPages;
+        render();
+        listEl.scrollIntoView({ behavior: 'smooth' });
+      });
+      paginationEl.appendChild(lastBtn);
+    }
+
+    // 「次へ」ボタン
+    const nextBtn = document.createElement('button');
+    nextBtn.className = 'page-btn';
+    nextBtn.innerHTML = '&raquo;';
+    nextBtn.setAttribute('aria-label', '次のページへ');
+    nextBtn.disabled = currentPage === totalPages;
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages) {
+        currentPage++;
+        render();
+        listEl.scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+    paginationEl.appendChild(nextBtn);
   }
 
   searchEl.addEventListener('input', (e)=>{
     searchTerm = e.target.value;
+    currentPage = 1;
     render();
   });
 

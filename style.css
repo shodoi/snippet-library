@@ -171,7 +171,22 @@ h1 {
 .tags {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tags::-webkit-scrollbar {
+  height: 5px;
+}
+.tags::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tags::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 3px;
 }
 
 .tag-btn {
@@ -1323,4 +1338,55 @@ html[data-theme="light"] .theme-menu-item.active {
 /* ダイアログ表示時の背景スクロール無効化 */
 body:has(dialog[open]) {
   overflow: hidden;
+}
+
+/* ページネーション */
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: 24px 0 10px;
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.page-btn:hover:not(:disabled) {
+  border-color: var(--teal-dim);
+  color: var(--teal);
+}
+
+.page-btn.active {
+  border-color: var(--teal);
+  color: var(--teal);
+  background: color-mix(in srgb, var(--teal) 12%, transparent);
+  font-weight: 600;
+}
+
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ライトテーマ時の調整 */
+html[data-theme="light"] .page-btn.active {
+  color: color-mix(in srgb, var(--teal) 85%, #000);
+  background: color-mix(in srgb, var(--teal) 10%, transparent);
 }
